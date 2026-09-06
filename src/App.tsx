@@ -234,7 +234,7 @@ export function App() {
                   style={{ color: theme.primary, backgroundColor: `${theme.primary}18`, borderColor: `${theme.primary}40` }}
                   className="px-2 py-0.5 rounded-md border text-[10px] font-mono font-bold"
                 >
-                  PRO STUDIO v3.0
+                  PRO STUDIO v3.1
                 </span>
               </div>
               <p className="text-xs text-stone-400 font-medium tracking-tight mt-0.5">
