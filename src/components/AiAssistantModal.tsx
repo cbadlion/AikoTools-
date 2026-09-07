@@ -72,7 +72,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
     {
       id: 'welcome',
       sender: 'ai',
-      text: '¡Hola! Soy Aiko, tu asistente multimedia autónomo. Puedes subir cualquier archivo y decirme lo que quieres (por ejemplo: "elimina el fondo", "conviértelo a WebP" o "aplica un filtro cyberpunk"). Yo lo procesaré de inmediato.',
+      text: t('ai.welcomeMessage', '¡Hola! Soy Aiko, tu asistente multimedia autónomo. Puedes subir cualquier archivo y decirme lo que quieres (por ejemplo: "elimina el fondo", "conviértelo a WebP" o "aplica un filtro cyberpunk"). Yo lo procesaré de inmediato.'),
       timestamp: Date.now()
     }
   ]);
@@ -555,7 +555,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
                   {t('ai.title', 'Asistente IA Multimedia')}
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#10B981]/20 text-[#34D399] border border-[#10B981]/30">
-                  AUTÓNOMO
+                  {t('ai.autonomous', 'AUTÓNOMO')}
                 </span>
               </div>
               <p className="text-[11px] text-stone-400">
@@ -572,7 +572,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
                   ? 'bg-[#10B981]/20 border-[#10B981]/40 text-[#10B981]'
                   : 'bg-[#181D2A] border-[#262C3E] text-stone-400'
               }`}
-              title={ttsEnabled ? 'Voz activada' : 'Voz desactivada'}
+              title={ttsEnabled ? t('ai.voiceEnabled', 'Voz activada') : t('ai.voiceDisabled', 'Voz desactivada')}
             >
               {ttsEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
             </button>
@@ -643,7 +643,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
                     <div className="flex items-center justify-between">
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#10B981]/20 text-[#34D399] font-bold text-[10px] border border-[#10B981]/30">
                         <CheckCircle2 className="h-3 w-3" />
-                        {m.result.format} PROCESADO
+                        {m.result.format} {t('ai.processed', 'PROCESADO')}
                       </span>
                       <span className="text-[10px] font-mono text-stone-400">
                         {Math.round(m.result.newSize / 1024)} KB
@@ -668,30 +668,30 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
 
                     {/* Chained Action Shortcuts for Generated Images */}
                     <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-[#1C2234]">
-                      <span className="text-[10px] text-stone-400 font-semibold">Transformar:</span>
+                      <span className="text-[10px] text-stone-400 font-semibold">{t('ai.transform', 'Transformar:')}</span>
                       <button
                         type="button"
                         onClick={() => handleChainTransformOnResult(m.result, 'remove_bg')}
                         className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-[#1A2234] hover:bg-[#25314C] text-[#34D399] border border-[#2B3A5A] transition-colors flex items-center gap-1 cursor-pointer"
-                        title="Eliminar fondo a esta imagen"
+                        title={t('ai.removeBgTitle', 'Eliminar fondo a esta imagen')}
                       >
-                        ✂️ Quitar Fondo
+                        ✂️ {t('ai.removeBg', 'Quitar Fondo')}
                       </button>
                       <button
                         type="button"
                         onClick={() => handleChainTransformOnResult(m.result, 'cyberpunk')}
                         className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-[#1A2234] hover:bg-[#25314C] text-purple-300 border border-[#2B3A5A] transition-colors flex items-center gap-1 cursor-pointer"
-                        title="Aplicar filtro Cyberpunk"
+                        title={t('ai.cyberpunkTitle', 'Aplicar filtro Cyberpunk')}
                       >
-                        🌆 Cyberpunk
+                        🌆 {t('ai.cyberpunk', 'Cyberpunk')}
                       </button>
                       <button
                         type="button"
                         onClick={() => handleChainTransformOnResult(m.result, 'palette')}
                         className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-[#1A2234] hover:bg-[#25314C] text-amber-300 border border-[#2B3A5A] transition-colors flex items-center gap-1 cursor-pointer"
-                        title="Extraer paleta de colores"
+                        title={t('ai.paletteTitle', 'Extraer paleta de colores')}
                       >
-                        🎨 Paleta
+                        🎨 {t('ai.palette', 'Paleta')}
                       </button>
                     </div>
 
@@ -730,8 +730,8 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
             <div className="flex items-center gap-2.5 p-3.5 rounded-2xl bg-gradient-to-r from-[#161B29] to-[#182333] border border-[#10B981]/50 text-xs text-[#34D399] max-w-[88%] shadow-lg animate-pulse">
               <Loader2 className="h-4 w-4 animate-spin text-[#10B981] shrink-0" />
               <div className="flex flex-col">
-                <span className="font-bold text-white">⚡ Procesando a alta velocidad...</span>
-                <span className="text-[11px] text-stone-300">Generando obra visual o razonando tu consulta con IA.</span>
+                <span className="font-bold text-white">{t('ai.processingFast', '⚡ Procesando a alta velocidad...')}</span>
+                <span className="text-[11px] text-stone-300">{t('ai.processingDesc', 'Generando obra visual o razonando tu consulta con IA.')}</span>
               </div>
             </div>
           )}
@@ -742,7 +742,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
         {/* Quick Sample Prompts Chips */}
         <div className="px-4 py-2 bg-[#10131E] border-t border-[#1F2536] overflow-x-auto no-scrollbar flex items-center gap-1.5">
           <span className="text-[10px] font-bold text-stone-400 shrink-0 uppercase tracking-wider flex items-center gap-1">
-            <Sparkles className="h-3 w-3 text-[#10B981]" /> Ideas IA:
+            <Sparkles className="h-3 w-3 text-[#10B981]" /> {t('ai.ideas', 'Ideas IA:')}
           </span>
           {attachedFile ? (
             <>
@@ -843,7 +843,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
             <button
               onClick={handleClearAttached}
               className="p-1 text-stone-400 hover:text-rose-400 transition-colors"
-              title="Quitar archivo"
+              title={t('ai.removeFile', 'Quitar archivo')}
             >
               <X className="h-4 w-4" />
             </button>
@@ -891,7 +891,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
                   ? 'bg-rose-500/20 border-rose-500 text-rose-400 animate-pulse ring-2 ring-rose-500/40'
                   : 'bg-[#191E2C] border-[#293145] text-stone-400 hover:text-white'
               }`}
-              title={isListening ? 'Detener micrófono' : t('ai.mic', 'Hablar por micrófono')}
+              title={isListening ? t('ai.stopMic', 'Detener micrófono') : t('ai.mic', 'Hablar por micrófono')}
             >
               {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
             </button>

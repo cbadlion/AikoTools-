@@ -33,9 +33,20 @@ export const Header: React.FC<HeaderProps> = ({
   const [historyCount, setHistoryCount] = useState(0);
   const [notifsActive, setNotifsActive] = useState(true);
   const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
+  const [langSearch, setLangSearch] = useState('');
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const langMenuRef = useRef<HTMLDivElement>(null);
   const themeMenuRef = useRef<HTMLDivElement>(null);
+
+  const filteredLanguages = languages.filter((l) => {
+    if (!langSearch.trim()) return true;
+    const q = langSearch.toLowerCase().trim();
+    return (
+      l.name.toLowerCase().includes(q) ||
+      l.nativeName.toLowerCase().includes(q) ||
+      l.code.toLowerCase().includes(q)
+    );
+  });
 
   const updateCounts = async () => {
     try {
@@ -132,7 +143,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
               id="btn-theme-switcher"
               className="flex h-9 items-center gap-1.5 px-2.5 rounded-xl bg-[#131624] border border-[#232B3E] text-stone-200 hover:text-white hover:border-stone-400 active:scale-95 text-xs font-semibold shadow-xs transition-all cursor-pointer"
-              title="Cambiar paleta de color y tema del estudio"
+              title={t('header.themeSwitcher', 'Cambiar paleta de color y tema del estudio')}
             >
               <div
                 className="w-3.5 h-3.5 rounded-full border border-white/30 shadow-xs"
@@ -148,7 +159,7 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="absolute right-0 mt-2 w-48 rounded-2xl bg-[#121524] border border-[#242C40] shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
                 <div className="px-2.5 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-stone-400 font-mono border-b border-[#1E2536] mb-1 flex items-center gap-1.5">
                   <Palette className="h-3 w-3" style={{ color: theme.primary }} />
-                  <span>Color de Acento</span>
+                  <span>{t('header.accentColor', 'Color de Acento')}</span>
                 </div>
                 <div className="space-y-1">
                   {availableThemes.map((tItem) => (
@@ -208,7 +219,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={onOpenShortcuts}
               id="btn-open-shortcuts"
               className="hidden sm:flex h-9 w-9 items-center justify-center rounded-xl bg-[#131624] border border-[#232B3E] text-stone-300 hover:text-white hover:border-stone-400 active:scale-95 text-xs transition-all cursor-pointer"
-              title="Atajos de teclado (Ctrl + /)"
+              title={`${t('shortcuts.title', 'Atajos de teclado')} (Ctrl + /)`}
             >
               <Keyboard className="h-3.5 w-3.5 text-stone-400" />
             </button>
@@ -230,32 +241,59 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             {isLangMenuOpen && (
-              <div className="absolute right-0 mt-2 w-44 rounded-2xl bg-[#121524] border border-[#242C40] shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
-                <div className="px-2.5 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-stone-400 font-mono border-b border-[#1E2536] mb-1 flex items-center gap-1">
-                  <Globe className="h-3 w-3" style={{ color: theme.primary }} />
-                  {t('header.language', 'Idioma')}
+              <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-[#121524] border border-[#242C40] shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="px-2.5 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-stone-400 font-mono border-b border-[#1E2536] mb-1 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Globe className="h-3 w-3" style={{ color: theme.primary }} />
+                    <span>{t('header.language', 'Idioma')}</span>
+                  </div>
+                  <span className="text-[9px] text-stone-400 font-normal">
+                    {filteredLanguages.length} / {languages.length}
+                  </span>
                 </div>
-                <div className="max-h-56 overflow-y-auto space-y-0.5 no-scrollbar">
-                  {languages.map((l) => (
-                    <button
-                      key={l.code}
-                      onClick={() => {
-                        setLanguage(l.code as LanguageCode);
-                        setIsLangMenuOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition-colors cursor-pointer ${
-                        language === l.code
-                          ? 'bg-[#1C2338] text-white font-bold border border-[#3B4764]'
-                          : 'text-stone-300 hover:bg-[#181D2E] hover:text-white'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">{l.flag}</span>
-                        <span>{l.nativeName}</span>
-                      </div>
-                      {language === l.code && <Check className="h-3.5 w-3.5" style={{ color: theme.primary }} />}
-                    </button>
-                  ))}
+
+                <div className="p-1 mb-1">
+                  <input
+                    type="text"
+                    value={langSearch}
+                    onChange={(e) => setLangSearch(e.target.value)}
+                    placeholder={t('common.search', 'Buscar...') || 'Buscar idioma...'}
+                    className="w-full px-2.5 py-1 text-xs bg-[#0C0F1A] border border-[#232B3E] rounded-lg text-white placeholder-stone-400 focus:outline-none focus:border-stone-400 font-sans"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="max-h-64 overflow-y-auto space-y-0.5 pr-0.5">
+                  {filteredLanguages.length === 0 ? (
+                    <div className="py-4 text-center text-xs text-stone-400">
+                      {t('tools.noResults', 'No se encontraron resultados')}
+                    </div>
+                  ) : (
+                    filteredLanguages.map((l) => (
+                      <button
+                        key={l.code}
+                        onClick={() => {
+                          setLanguage(l.code as LanguageCode);
+                          setIsLangMenuOpen(false);
+                          setLangSearch('');
+                        }}
+                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs transition-colors cursor-pointer ${
+                          language === l.code
+                            ? 'bg-[#1C2338] text-white font-bold border border-[#3B4764]'
+                            : 'text-stone-300 hover:bg-[#181D2E] hover:text-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-sm shrink-0">{l.flag}</span>
+                          <div className="flex flex-col text-left truncate">
+                            <span className="truncate text-xs">{l.nativeName}</span>
+                            <span className="text-[10px] text-stone-400 truncate leading-none mt-0.5">{l.name}</span>
+                          </div>
+                        </div>
+                        {language === l.code && <Check className="h-3.5 w-3.5 shrink-0" style={{ color: theme.primary }} />}
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
             )}

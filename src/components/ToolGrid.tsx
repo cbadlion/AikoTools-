@@ -34,6 +34,7 @@ import {
   Split
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
 
 interface ToolGridProps {
   tools: ToolDefinition[];
@@ -47,6 +48,7 @@ export const ToolGrid: React.FC<ToolGridProps> = ({
   onSelectTool
 }) => {
   const { theme } = useTheme();
+  const { t } = useLanguage();
 
   const getToolIcon = (iconName: string, toolId?: string) => {
     const iconClass = "h-5 w-5 stroke-[2.2]";
@@ -163,7 +165,7 @@ export const ToolGrid: React.FC<ToolGridProps> = ({
                         : 'text-stone-400 bg-[#161B28] border-[#242C3E]'
                     }`}
                   >
-                    {tool.category}
+                    {t(`cat.${tool.category}`, tool.category)}
                   </span>
                   
                   <div className={`p-1 rounded-lg transition-colors ${isSelected ? 'text-white' : 'text-stone-600 group-hover:text-stone-300'}`}>
@@ -179,10 +181,10 @@ export const ToolGrid: React.FC<ToolGridProps> = ({
                   isSelected ? 'font-black' : 'text-white group-hover:text-stone-100'
                 }`}
               >
-                {tool.name}
+                {t(`tool.${tool.id}.name`, tool.name)}
               </h3>
               <p className="mt-1 text-xs text-stone-400 leading-relaxed line-clamp-2">
-                {tool.subtitle}
+                {t(`tool.${tool.id}.subtitle`, tool.subtitle)}
               </p>
             </div>
 

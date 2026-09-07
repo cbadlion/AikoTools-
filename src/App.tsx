@@ -45,16 +45,22 @@ export function App() {
       const matchesCategory =
         activeCategory === 'all' || tool.category === activeCategory;
       const q = searchQuery.toLowerCase().trim();
+      const translatedName = t(`tool.${tool.id}.name`, tool.name).toLowerCase();
+      const translatedSub = t(`tool.${tool.id}.sub`, tool.subtitle).toLowerCase();
+      const translatedDesc = t(`tool.${tool.id}.desc`, tool.description).toLowerCase();
       const matchesSearch =
         !q ||
         tool.name.toLowerCase().includes(q) ||
         tool.subtitle.toLowerCase().includes(q) ||
         tool.description.toLowerCase().includes(q) ||
+        translatedName.includes(q) ||
+        translatedSub.includes(q) ||
+        translatedDesc.includes(q) ||
         tool.category.toLowerCase().includes(q) ||
         (tool.subtools && tool.subtools.some((s) => s.toLowerCase().includes(q)));
       return matchesCategory && matchesSearch;
     });
-  }, [activeCategory, searchQuery]);
+  }, [activeCategory, searchQuery, t]);
 
   const handleFileSelected = (file: File) => {
     const previewUrl = URL.createObjectURL(file);
@@ -247,7 +253,7 @@ export function App() {
           <div className="hidden sm:flex items-center gap-3 bg-[#11131B] border border-[#222736] px-3.5 py-2 rounded-xl text-[11px] font-mono text-stone-300 shadow-sm">
             <div className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: theme.primary }} />
-              <span className="font-bold" style={{ color: theme.primary }}>Motor Local RedPro</span>
+              <span className="font-bold" style={{ color: theme.primary }}>{t('app.localEngine', 'Motor Local RedPro')}</span>
             </div>
             <span className="text-stone-700">|</span>
             <div className="flex items-center gap-1 text-stone-300">
@@ -359,6 +365,7 @@ export function App() {
               fileInfo={activeFile}
               onClearFile={handleClearFile}
               onChangeTool={(t) => setSelectedTool(t)}
+              onChainResult={handleSelectResultForWorkspace}
             />
           ) : (
             <UploadZone
@@ -413,10 +420,10 @@ export function App() {
               className="w-full rounded-xl bg-[#11131B] border border-[#222736] pl-10 pr-9 py-3 text-xs sm:text-sm text-white placeholder:text-stone-500 focus:border-red-500 focus:outline-none shadow-md transition-all"
             />
             {searchQuery && (
-              <button
+                <button
                 onClick={() => setSearchQuery('')}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-white p-1 cursor-pointer"
-                title="Limpiar búsqueda"
+                title={t('tools.clearSearch', 'Limpiar búsqueda')}
               >
                 <X className="h-3.5 w-3.5" />
               </button>

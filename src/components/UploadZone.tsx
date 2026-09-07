@@ -41,8 +41,8 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, selected
         clearInterval(progressTimerRef.current);
 
         notifyUser({
-          title: `🔥 ${file.name}`,
-          body: `Listo para procesar con ${selectedTool?.name || 'AikoTools Studio'}.`,
+          title: `⚡ ${file.name}`,
+          body: `${t('upload.readyToProcess', 'Listo para procesar con')} ${selectedTool ? t(`tool.${selectedTool.id}.name`, selectedTool.name) : 'AikoTools Studio'}.`,
           type: 'success'
         });
 
@@ -172,7 +172,7 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, selected
                   type="button"
                   onClick={handleCancelUpload}
                   className="p-2 rounded-lg text-stone-400 hover:text-white hover:bg-[#252C3E] transition-colors cursor-pointer"
-                  title="Cancelar"
+                  title={t('upload.cancel', 'Cancelar')}
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -185,7 +185,7 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, selected
                       className="h-2 w-2 rounded-full animate-ping"
                       style={{ backgroundColor: toolColor }}
                     />
-                    {uploadProgress < 100 ? 'Procesando en búfer de memoria...' : '¡Listo! Inicializando canvas'}
+                    {uploadProgress < 100 ? t('upload.buffering', 'Procesando en búfer de memoria...') : t('upload.readyCanvas', '¡Listo! Inicializando canvas')}
                   </span>
                   <span
                     style={{ color: toolColor }}
@@ -209,7 +209,7 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, selected
 
               <div className="flex items-center justify-center gap-2 text-xs text-stone-400 font-medium pt-1">
                 <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                <span>Procesamiento 100% privado en navegador</span>
+                <span>{t('upload.privateLocal', 'Procesamiento 100% privado en navegador')}</span>
               </div>
             </div>
           ) : (
@@ -251,7 +251,7 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, selected
 
                 <div className="hidden sm:flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-[#141720] border border-[#242938] text-xs font-mono text-stone-300">
                   <span className="font-bold text-stone-400">Ctrl + V</span>
-                  <span>pega desde portapapeles</span>
+                  <span>{t('upload.pasteClipboard', 'pega desde portapapeles')}</span>
                 </div>
               </div>
 
@@ -260,9 +260,9 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, selected
                 <div className="flex items-center justify-between text-xs text-stone-400 font-semibold mb-3">
                   <span className="flex items-center gap-1.5">
                     <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                    <span>¿Sin archivo a mano? Carga una muestra rápida:</span>
+                    <span>{t('upload.noFileSample', '¿Sin archivo a mano? Carga una muestra rápida:')}</span>
                   </span>
-                  <span className="text-[10px] uppercase font-mono tracking-wider text-stone-400">Demo Instantánea</span>
+                  <span className="text-[10px] uppercase font-mono tracking-wider text-stone-400">{t('upload.instantDemo', 'Demo Instantánea')}</span>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -274,7 +274,7 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, selected
                     }}
                     className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-[#141722] hover:bg-[#1C202E] border border-[#222736] hover:border-red-500/50 text-xs font-semibold text-stone-200 hover:text-white transition-all cursor-pointer shadow-xs"
                   >
-                    <span>👤 Avatar HD</span>
+                    <span>{t('upload.sampleAvatar', '👤 Avatar HD')}</span>
                   </button>
 
                   <button
@@ -285,7 +285,7 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, selected
                     }}
                     className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-[#141722] hover:bg-[#1C202E] border border-[#222736] hover:border-amber-500/50 text-xs font-semibold text-stone-200 hover:text-white transition-all cursor-pointer shadow-xs"
                   >
-                    <span>⚡ Logo Vector</span>
+                    <span>{t('upload.sampleLogo', '⚡ Logo Vector')}</span>
                   </button>
 
                   <button
@@ -296,7 +296,7 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, selected
                     }}
                     className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-[#141722] hover:bg-[#1C202E] border border-[#222736] hover:border-cyan-500/50 text-xs font-semibold text-stone-200 hover:text-white transition-all cursor-pointer shadow-xs"
                   >
-                    <span>🌄 Paisaje 4K</span>
+                    <span>{t('upload.sampleLandscape', '🌄 Paisaje 4K')}</span>
                   </button>
 
                   <button
@@ -307,7 +307,7 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, selected
                     }}
                     className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-[#141722] hover:bg-[#1C202E] border border-[#222736] hover:border-rose-500/50 text-xs font-semibold text-stone-200 hover:text-white transition-all cursor-pointer shadow-xs"
                   >
-                    <span>✨ Sticker Alpha</span>
+                    <span>{t('upload.sampleSticker', '✨ Sticker Alpha')}</span>
                   </button>
                 </div>
               </div>
@@ -315,10 +315,10 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, selected
               {/* Supported Format Badges */}
               <div className="flex flex-wrap items-center justify-center gap-1.5 mt-5 text-[11px] font-mono">
                 <span className="px-2 py-0.5 rounded bg-[#161822] text-stone-300 border border-[#242838]">PNG / JPG</span>
-                <span className="px-2 py-0.5 rounded bg-[#161822] text-stone-300 border border-[#242838]">GIF ANIMADO</span>
+                <span className="px-2 py-0.5 rounded bg-[#161822] text-stone-300 border border-[#242838]">{t('upload.animatedGif', 'GIF ANIMADO')}</span>
                 <span className="px-2 py-0.5 rounded bg-[#161822] text-stone-300 border border-[#242838]">WEBP / AVIF</span>
                 <span className="px-2 py-0.5 rounded bg-[#161822] text-stone-300 border border-[#242838]">MP4 / WEBM</span>
-                <span className="px-2 py-0.5 rounded bg-[#161822] text-stone-300 border border-[#242838]">SVG VECTOR</span>
+                <span className="px-2 py-0.5 rounded bg-[#161822] text-stone-300 border border-[#242838]">{t('upload.vectorSvg', 'SVG VECTOR')}</span>
                 <span className="px-2 py-0.5 rounded bg-[#161822] text-stone-300 border border-[#242838]">ICO / BMP</span>
               </div>
             </>

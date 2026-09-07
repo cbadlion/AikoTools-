@@ -4673,3 +4673,12 @@ export async function smoothAndAccelerateMedia(
   };
 }
 
+export {
+  extractMediaMetadata,
+  stripMediaMetadata
+} from './metadataEngine';
+export type {
+  ExifMetadata,
+  GpsLocation
+} from './metadataEngine';
+

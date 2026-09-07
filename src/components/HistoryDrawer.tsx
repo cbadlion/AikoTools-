@@ -142,7 +142,7 @@ export function HistoryDrawer({ isOpen, onClose }: HistoryDrawerProps) {
           {loading ? (
             <div className="py-12 text-center text-stone-400 text-xs">
               <div className="h-6 w-6 border-2 border-[#10B981] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-              Cargando...
+              {t('history.loading', 'Cargando...')}
             </div>
           ) : items.length === 0 ? (
             <div className="py-16 text-center space-y-3">

@@ -8,6 +8,7 @@ interface LanguageContextType {
   t: (key: string, fallback?: string) => string;
   currentLanguageOption: LanguageOption;
   languages: LanguageOption[];
+  isRTL: boolean;
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
@@ -18,12 +19,30 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (saved && SUPPORTED_LANGUAGES.some((l) => l.code === saved)) {
       return saved;
     }
-    const browserLang = navigator.language.slice(0, 2).toLowerCase() as LanguageCode;
-    if (SUPPORTED_LANGUAGES.some((l) => l.code === browserLang)) {
-      return browserLang;
+    const navLang = navigator.language || '';
+    // Exact match (e.g. zh-TW)
+    const exact = SUPPORTED_LANGUAGES.find((l) => l.code.toLowerCase() === navLang.toLowerCase());
+    if (exact) return exact.code as LanguageCode;
+
+    // Traditional Chinese variants
+    if (navLang.toLowerCase().includes('tw') || navLang.toLowerCase().includes('hant') || navLang.toLowerCase().includes('hk')) {
+      return 'zh-TW';
     }
+
+    // 2-letter prefix match
+    const shortLang = navLang.slice(0, 2).toLowerCase();
+    const shortMatch = SUPPORTED_LANGUAGES.find((l) => l.code.toLowerCase() === shortLang);
+    if (shortMatch) return shortMatch.code as LanguageCode;
+
     return 'es';
   });
+
+  const isRTL = language === 'ar' || language === 'he';
+
+  useEffect(() => {
+    document.documentElement.lang = language;
+    document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
+  }, [language, isRTL]);
 
   const setLanguage = (lang: LanguageCode) => {
     setLanguageState(lang);
@@ -55,7 +74,8 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setLanguage,
         t,
         currentLanguageOption,
-        languages: SUPPORTED_LANGUAGES
+        languages: SUPPORTED_LANGUAGES,
+        isRTL
       }}
     >
       {children}

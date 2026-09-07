@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { ToastNotification } from '../utils/notifications';
 import { CheckCircle2, Info, AlertTriangle, X, Sparkles } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 
 export const NotificationToastContainer: React.FC = () => {
+  const { t: translate } = useLanguage();
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
 
   useEffect(() => {
@@ -69,7 +71,7 @@ export const NotificationToastContainer: React.FC = () => {
           <button
             onClick={() => removeToast(t.id)}
             className="p-1 rounded-lg text-stone-400 hover:text-white hover:bg-[#1E2536] transition-colors shrink-0"
-            aria-label="Cerrar notificación"
+            aria-label={translate('notification.close', 'Cerrar notificación')}
           >
             <X className="h-3.5 w-3.5" />
           </button>

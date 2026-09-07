@@ -17,6 +17,7 @@ import {
 import { SUBTOOLS_NAV_ITEMS } from '../data/tools';
 import { ToolDefinition } from '../types';
 import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
 
 interface SubtoolsBarProps {
   selectedTool: ToolDefinition | null;
@@ -28,6 +29,7 @@ export const SubtoolsBar: React.FC<SubtoolsBarProps> = ({
   onSelectToolById
 }) => {
   const { theme } = useTheme();
+  const { t } = useLanguage();
 
   const getSubtoolIcon = (itemId: string) => {
     const iconClass = "h-3.5 w-3.5 shrink-0";
@@ -84,7 +86,7 @@ export const SubtoolsBar: React.FC<SubtoolsBarProps> = ({
               <span style={{ color: isActive ? itemColor : undefined }}>
                 {getSubtoolIcon(item.id)}
               </span>
-              <span>{item.label}</span>
+              <span>{t(`subtool.${item.id}`, item.label)}</span>
             </button>
           );
         })}

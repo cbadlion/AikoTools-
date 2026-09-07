@@ -15,11 +15,11 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
   if (!isOpen) return null;
 
   const shortcuts = [
-    { keys: ['Ctrl', 'O'], desc: 'Abrir selector de archivos' },
-    { keys: ['Ctrl', 'V'], desc: 'Pegar imagen o captura del portapapeles' },
-    { keys: ['Ctrl', 'Enter'], desc: 'Procesar archivo inmediatamente' },
-    { keys: ['Ctrl', '/'], desc: 'Abrir este menú de atajos' },
-    { keys: ['Esc'], desc: 'Cerrar ventanas, menús o paneles activos' }
+    { keys: ['Ctrl', 'O'], desc: t('shortcuts.openFile', 'Abrir selector de archivos') },
+    { keys: ['Ctrl', 'V'], desc: t('shortcuts.pasteClipboard', 'Pegar imagen o captura del portapapeles') },
+    { keys: ['Ctrl', 'Enter'], desc: t('shortcuts.processNow', 'Procesar archivo inmediatamente') },
+    { keys: ['Ctrl', '/'], desc: t('shortcuts.openShortcuts', 'Abrir este menú de atajos') },
+    { keys: ['Esc'], desc: t('shortcuts.closeWindows', 'Cerrar ventanas, menús o paneles activos') }
   ];
 
   return (
@@ -35,8 +35,8 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
               <Keyboard className="h-4 w-4" style={{ color: theme.primary }} />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">Atajos de Teclado</h3>
-              <p className="text-[11px] text-stone-400">Optimiza tu flujo de trabajo rápido</p>
+              <h3 className="text-base font-bold text-white">{t('shortcuts.title', 'Atajos de Teclado')}</h3>
+              <p className="text-[11px] text-stone-400">{t('shortcuts.subtitle', 'Optimiza tu flujo de trabajo rápido')}</p>
             </div>
           </div>
 
@@ -77,7 +77,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
         {/* Mascot / Pro Tip */}
         <div className="p-3 rounded-2xl bg-[#181D30] border border-[#28324C] flex items-center gap-2 text-xs text-stone-300">
           <Sparkles className="h-4 w-4 text-amber-400 shrink-0" />
-          <span>¡Puedes arrastrar y soltar cualquier formato directamente en la ventana!</span>
+          <span>{t('shortcuts.tip', '¡Puedes arrastrar y soltar cualquier formato directamente en la ventana!')}</span>
         </div>
       </div>
     </div>

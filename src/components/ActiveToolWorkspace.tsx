@@ -42,7 +42,10 @@ import {
   EnhanceQualityOptions,
   smoothAndAccelerateMedia,
   SmoothMode,
-  SmoothMediaOptions
+  SmoothMediaOptions,
+  extractMediaMetadata,
+  stripMediaMetadata,
+  ExifMetadata
 } from '../utils/mediaEngine';
 import { saveToHistory } from '../utils/historyStorage';
 import { notifyUser } from '../utils/notifications';
@@ -92,26 +95,49 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  MapPin,
+  Camera,
+  ExternalLink,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import Markdown from 'react-markdown';
+import { useLanguage } from '../context/LanguageContext';
 
 interface ActiveToolWorkspaceProps {
   tool: ToolDefinition;
   fileInfo: MediaFileInfo;
   onClearFile: () => void;
   onChangeTool: (toolId: any) => void;
+  onChainResult?: (file: File, nextToolId: string) => void;
 }
 
 export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
   tool,
   fileInfo,
-  onClearFile
+  onClearFile,
+  onChangeTool,
+  onChainResult
 }) => {
+  const { t } = useLanguage();
   const [status, setStatus] = useState<ProcessState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [result, setResult] = useState<ProcessResult | null>(null);
   const [processProgress, setProcessProgress] = useState<number>(0);
+
+  // Metadata / EXIF / Privacy Analyzer state
+  const [metadataInfo, setMetadataInfo] = useState<ExifMetadata | null>(null);
+  const [isLoadingMetadata, setIsLoadingMetadata] = useState<boolean>(false);
+
+  // Interactive Split Slider & Copy states
+  const [isSplitMode, setIsSplitMode] = useState<boolean>(false);
+  const [splitPercent, setSplitPercent] = useState<number>(50);
+  const [isCopied, setIsCopied] = useState<boolean>(false);
+
+  // Fullscreen Zoom Inspector Modal
+  const [isZoomModalOpen, setIsZoomModalOpen] = useState<boolean>(false);
+  const [zoomScale, setZoomScale] = useState<number>(1);
 
   // Background Remover options
   const [bgViewMode, setBgViewMode] = useState<'interactive' | 'options'>('interactive');
@@ -332,6 +358,56 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
       setMediaAnalysisResult('No se pudo completar el análisis visual en este momento.');
     } finally {
       setIsAnalyzingMedia(false);
+    }
+  };
+
+  // Inspect EXIF, GPS & GIF structure automatically when analyzer tool is selected
+  useEffect(() => {
+    if (tool.id === 'analyzer-tools' && fileInfo?.file) {
+      setIsLoadingMetadata(true);
+      extractMediaMetadata(fileInfo.file)
+        .then((meta) => {
+          setMetadataInfo(meta);
+          setIsLoadingMetadata(false);
+        })
+        .catch((err) => {
+          console.warn('Metadata inspection failed:', err);
+          setIsLoadingMetadata(false);
+        });
+    }
+  }, [tool.id, fileInfo]);
+
+  // Copy processed image directly to user's system clipboard
+  const handleCopyImage = async () => {
+    if (!result?.blob) return;
+    try {
+      let blobToCopy = result.blob;
+      if (!blobToCopy.type.includes('png')) {
+        const canvas = document.createElement('canvas');
+        const img = new Image();
+        await new Promise((res, rej) => {
+          img.onload = () => res(null);
+          img.onerror = rej;
+          img.src = result.url;
+        });
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0);
+        blobToCopy = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b!), 'image/png'));
+      }
+      await navigator.clipboard.write([
+        new ClipboardItem({ [blobToCopy.type]: blobToCopy })
+      ]);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2500);
+      notifyUser({
+        title: '📋 Copiado al portapapeles',
+        body: 'La imagen se copió en alta resolución. Lista para pegar en cualquier chat o documento.',
+        type: 'success'
+      });
+    } catch (err) {
+      console.warn('Clipboard write error:', err);
     }
   };
 
@@ -991,6 +1067,15 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
           setProcessProgress(100);
         }
       }
+      // 13. ANALYZER & EXIF PRIVACY SCRUBBER
+      else if (tool.id === 'analyzer-tools') {
+        setProcessProgress(25);
+        res = await stripMediaMetadata(fileInfo.file, {
+          outputFormat: (selectedOutputFormat !== 'auto' ? selectedOutputFormat : undefined) as any,
+          onProgress: (p) => setProcessProgress(p)
+        });
+        setProcessProgress(100);
+      }
       // Default fallback
       else {
         setProcessProgress(50);
@@ -1074,10 +1159,10 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
               type="button"
               onClick={handleAnalyzeLoadedImage}
               className="flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-gradient-to-r from-red-600/30 to-amber-600/30 hover:from-red-600/40 hover:to-amber-600/40 text-xs font-bold text-red-200 hover:text-white border border-red-500/40 transition-all shadow-xs"
-              title="Analizar esta imagen con IA de Gemini"
+              title={t('tools.aiAnalysisTitle', 'Analizar esta imagen con IA de Gemini')}
             >
               <Sparkles className="h-3.5 w-3.5 text-red-400 animate-spin-slow" />
-              <span className="hidden sm:inline">Análisis IA</span>
+              <span className="hidden sm:inline">{t('tools.aiAnalysis', 'Análisis IA')}</span>
               <span className="sm:hidden">IA</span>
             </button>
           )}
@@ -1086,10 +1171,10 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
             type="button"
             onClick={onClearFile}
             className="flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-[#18202E] hover:bg-[#1E2B38] text-xs font-semibold text-[#A7F3D0] hover:text-white border border-[#26354A] transition-colors"
-            title="Cambiar archivo"
+            title={t('upload.changeFile', 'Cambiar archivo')}
           >
             <X className="h-3.5 w-3.5 text-[#10B981]" />
-            <span>Cambiar</span>
+            <span>{t('workspace.change', 'Cambiar')}</span>
           </button>
         </div>
       </div>
@@ -1107,7 +1192,7 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
             }`}
           >
             <Wand2 className="h-4 w-4 text-[#34D399]" />
-            <span>🪄 Editor Táctil & Varita Mágica (En Vivo)</span>
+            <span>{t('workspace.touchEditor', '🪄 Editor Táctil & Varita Mágica (En Vivo)')}</span>
           </button>
           <button
             type="button"
@@ -1119,7 +1204,7 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
             }`}
           >
             <Sliders className="h-4 w-4 text-[#34D399]" />
-            <span>⚙️ Ajustes Automáticos y Parámetros</span>
+            <span>{t('workspace.autoAdjustments', '⚙️ Ajustes Automáticos y Parámetros')}</span>
           </button>
         </div>
       )}
@@ -1142,11 +1227,11 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
             <div className="flex items-center gap-2">
               <span className="h-2.5 w-2.5 rounded-full bg-[#10B981] shadow-[0_0_8px_#10B981] animate-pulse" />
               <h3 className="text-sm font-bold text-white">
-                {tool.name}
+                {t(`tool.${tool.id}.name`, tool.name)}
               </h3>
             </div>
             <span className="text-[10px] font-bold tracking-widest text-[#34D399] uppercase bg-[#14261C] px-2 py-0.5 rounded-full border border-[#10B981]/40">
-              100% LOCAL
+              {t('tools.localNotice', '100% LOCAL')}
             </span>
           </div>
 
@@ -4543,6 +4628,124 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
             </div>
           )}
 
+          {/* =========================================================
+              12. EXIF METADATA & PRIVACY SCRUBBER (analyzer-tools)
+             ========================================================= */}
+          {tool.id === 'analyzer-tools' && (
+            <div className="space-y-3.5 text-left animate-in fade-in duration-200">
+              {isLoadingMetadata ? (
+                <div className="p-5 rounded-2xl bg-[#141724] border border-[#262C3E] flex items-center justify-center gap-2.5 text-stone-400 text-xs">
+                  <RefreshCw className="h-4 w-4 animate-spin text-cyan-400" />
+                  <span>Inspeccionando bloques binarios EXIF, GPS y fotogramas...</span>
+                </div>
+              ) : metadataInfo ? (
+                <div className="space-y-3">
+                  {/* Privacy Alert Header */}
+                  {metadataInfo.hasGps ? (
+                    <div className="p-3.5 rounded-2xl bg-rose-950/60 border border-rose-500/70 text-rose-200 space-y-1.5 shadow-lg">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-rose-400 animate-bounce" />
+                        <h4 className="text-xs font-black text-rose-300 uppercase tracking-wider">
+                          ¡Alerta de Privacidad! Ubicación GPS Encontrada
+                        </h4>
+                      </div>
+                      <p className="text-[11px] text-rose-200/90 leading-relaxed">
+                        Esta fotografía contiene tus coordenadas geográficas exactas registradas por el teléfono/cámara.
+                        Cualquier persona que descargue esta foto puede ver dónde fue tomada.
+                      </p>
+                      {metadataInfo.gps && (
+                        <div className="flex items-center justify-between pt-1 text-[10px] font-mono">
+                          <span className="text-rose-300">
+                            Lat: {metadataInfo.gps.latitude}°, Lon: {metadataInfo.gps.longitude}°
+                            {metadataInfo.gps.altitude ? ` (${metadataInfo.gps.altitude}m)` : ''}
+                          </span>
+                          <a
+                            href={metadataInfo.gps.googleMapsUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-900/80 hover:bg-rose-800 text-white font-bold transition-colors"
+                          >
+                            <span>Ver en Google Maps</span>
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  ) : metadataInfo.privacyRisk === 'MEDIO' ? (
+                    <div className="p-3 rounded-2xl bg-amber-950/50 border border-amber-500/60 text-amber-200 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Camera className="h-4 w-4 text-amber-400" />
+                        <h4 className="text-xs font-bold text-amber-300">Metadatos de Dispositivo y Fecha Detectados</h4>
+                      </div>
+                      <p className="text-[11px] text-amber-200/80">
+                        La foto registra información de la cámara, fecha y software, pero no contiene GPS exacto.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-2xl bg-[#10B981]/15 border border-[#10B981]/60 text-[#34D399] flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4 text-[#10B981]" />
+                      <span className="text-xs font-bold">¡Archivo Limpio! No se detectaron rastros GPS ni EXIF invasivos.</span>
+                    </div>
+                  )}
+
+                  {/* Metadata Specs Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                    <div className="p-2.5 rounded-xl bg-[#121520] border border-[#222736]">
+                      <span className="text-[10px] text-stone-400">Dimensiones</span>
+                      <p className="font-mono font-bold text-white">
+                        {metadataInfo.dimensions ? `${metadataInfo.dimensions.width} × ${metadataInfo.dimensions.height} px` : 'N/D'}
+                      </p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-[#121520] border border-[#222736]">
+                      <span className="text-[10px] text-stone-400">Cámara / Marca</span>
+                      <p className="font-bold text-white truncate">
+                        {metadataInfo.make ? `${metadataInfo.make} ${metadataInfo.model || ''}` : 'No registrada'}
+                      </p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-[#121520] border border-[#222736]">
+                      <span className="text-[10px] text-stone-400">Fecha y Hora</span>
+                      <p className="font-mono font-semibold text-white truncate">
+                        {metadataInfo.dateTime || 'No registrada'}
+                      </p>
+                    </div>
+                    {metadataInfo.iso && (
+                      <div className="p-2.5 rounded-xl bg-[#121520] border border-[#222736]">
+                        <span className="text-[10px] text-stone-400">Sensibilidad</span>
+                        <p className="font-mono font-bold text-cyan-300">ISO {metadataInfo.iso}</p>
+                      </div>
+                    )}
+                    {metadataInfo.fNumber && (
+                      <div className="p-2.5 rounded-xl bg-[#121520] border border-[#222736]">
+                        <span className="text-[10px] text-stone-400">Apertura</span>
+                        <p className="font-mono font-bold text-cyan-300">{metadataInfo.fNumber}</p>
+                      </div>
+                    )}
+                    {metadataInfo.exposureTime && (
+                      <div className="p-2.5 rounded-xl bg-[#121520] border border-[#222736]">
+                        <span className="text-[10px] text-stone-400">Exposición</span>
+                        <p className="font-mono font-bold text-cyan-300">{metadataInfo.exposureTime}</p>
+                      </div>
+                    )}
+                    {metadataInfo.isGif && (
+                      <>
+                        <div className="p-2.5 rounded-xl bg-[#121520] border border-[#222736]">
+                          <span className="text-[10px] text-stone-400">Fotogramas GIF</span>
+                          <p className="font-mono font-bold text-emerald-400">{metadataInfo.gifFramesCount} cuadros</p>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-[#121520] border border-[#222736]">
+                          <span className="text-[10px] text-stone-400">Bucle / Duración</span>
+                          <p className="font-mono font-bold text-emerald-400">
+                            {metadataInfo.gifTotalDurationSec ? `${metadataInfo.gifTotalDurationSec}s (${metadataInfo.gifLoopCount})` : metadataInfo.gifLoopCount}
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
+
           {/* Formato de salida final (permite conservar WebP o forzar PNG/JPG/AVIF/GIF/BMP/ICO/PDF/SVG) */}
           {!isVideo && tool.id !== 'palette-tools' && tool.id !== 'audio-tools' && (
             <div className="pt-2 border-t border-[#262C3E] space-y-1.5">
@@ -4610,7 +4813,7 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
                 <>
                   <div className="flex items-center gap-2 z-10 font-bold">
                     <RefreshCw className="h-4 w-4 animate-spin text-[#A7F3D0]" />
-                    <span className="text-white drop-shadow">Procesando archivo...</span>
+                    <span className="text-white drop-shadow">{t('workspace.processing', 'Procesando archivo...')}</span>
                   </div>
                   <div className="z-10 bg-black/60 backdrop-blur-xs px-3 py-1 rounded-full border border-[#34D399]/80 font-mono text-xs font-black text-[#6EE7B7] shadow-[0_0_10px_#10B981]">
                     {processProgress}%
@@ -4627,10 +4830,12 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
                     <Zap className="h-4 w-4 fill-white" />
                     <span>
                       {tool.id === 'optimize-tools'
-                        ? 'Comprimir y Reducir Peso'
+                        ? t('workspace.compressAndReduce', 'Comprimir y Reducir Peso')
                         : tool.id === 'recolor-tools'
-                        ? 'Aplicar Cambio de Color'
-                        : 'Procesar archivo'}
+                        ? t('workspace.applyRecolor', 'Aplicar Cambio de Color')
+                        : tool.id === 'analyzer-tools'
+                        ? '🛡️ Limpiar Metadatos y Eliminar GPS (100% Seguro)'
+                        : t('workspace.processFile', 'Procesar archivo')}
                     </span>
                   </div>
                 </>
@@ -4640,7 +4845,7 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
             {status === 'processing' && (
               <p className="text-center text-[11px] text-[#34D399] font-bold animate-pulse flex items-center justify-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-[#10B981] animate-ping" />
-                Procesando en tu dispositivo... {processProgress}%
+                {t('workspace.processingOnDevice', 'Procesando en tu dispositivo...')} {processProgress}%
               </p>
             )}
           </div>
@@ -4690,6 +4895,37 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
                 </button>
               )}
 
+              {result && !result.blob.type.startsWith('audio/') && !isVideo && (
+                <button
+                  type="button"
+                  onClick={() => setIsSplitMode((prev) => !prev)}
+                  className={`text-[11px] font-semibold px-2 py-1 rounded-xl border flex items-center gap-1 transition-all cursor-pointer select-none ${
+                    isSplitMode
+                      ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 shadow-xs'
+                      : 'bg-[#181C2B] border-[#262C3E] text-stone-300 hover:text-white'
+                  }`}
+                  title="Comparador interactivo antes/después con control deslizante"
+                >
+                  <Split className="h-3.5 w-3.5 text-cyan-400" />
+                  <span className="hidden sm:inline">Slider Dividido</span>
+                </button>
+              )}
+
+              {/* Fullscreen Zoom Inspector Button */}
+              {!isVideo && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setZoomScale(1);
+                    setIsZoomModalOpen(true);
+                  }}
+                  className="p-1.5 rounded-xl border bg-[#181C2B] border-[#262C3E] text-stone-300 hover:text-white transition-all cursor-pointer"
+                  title="Inspeccionar en pantalla completa con Zoom"
+                >
+                  <Maximize2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+
               {result && (
                 <span className="text-[11px] font-mono text-[#34D399] font-bold flex items-center gap-1">
                   <Clock className="h-3 w-3" /> {result.timeTakenMs} ms
@@ -4710,6 +4946,57 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
                     <p className="text-xs text-[#34D399] font-mono mt-0.5">{result.extraInfo}</p>
                   </div>
                   <audio controls autoPlay src={result.url} className="w-full max-w-xs mt-2" />
+                </div>
+              ) : isSplitMode ? (
+                /* Interactive Split Slider Viewer */
+                <div className="relative w-full flex flex-col items-center gap-2">
+                  <div className="relative max-h-[280px] w-full flex items-center justify-center overflow-hidden rounded-xl select-none">
+                    {/* Original image as base */}
+                    <img
+                      src={fileInfo.previewUrl}
+                      alt="Original"
+                      className="max-h-[270px] w-auto max-w-full object-contain pointer-events-none"
+                    />
+                    {/* Processed image clipped */}
+                    <div
+                      className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden"
+                      style={{ clipPath: `polygon(0 0, ${splitPercent}% 0, ${splitPercent}% 100%, 0 100%)` }}
+                    >
+                      <img
+                        src={result.url}
+                        alt="Resultado"
+                        className="max-h-[270px] w-auto max-w-full object-contain pointer-events-none"
+                      />
+                    </div>
+                    {/* Dividing vertical neon line */}
+                    <div
+                      className="absolute top-0 bottom-0 w-[2px] bg-cyan-400 pointer-events-none shadow-[0_0_10px_rgba(6,182,212,1)]"
+                      style={{ left: `${splitPercent}%` }}
+                    >
+                      <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 bg-[#0A0D16] border border-cyan-400 text-cyan-300 rounded-full p-1 shadow-md">
+                        <Split className="h-3 w-3" />
+                      </div>
+                    </div>
+                    <span className="absolute bottom-2 left-2 bg-black/80 border border-cyan-500/60 text-cyan-300 text-[10px] font-bold px-2 py-0.5 rounded-full pointer-events-none">
+                      Resultado ({splitPercent}%)
+                    </span>
+                    <span className="absolute bottom-2 right-2 bg-black/80 border border-stone-600 text-stone-300 text-[10px] font-bold px-2 py-0.5 rounded-full pointer-events-none">
+                      Original
+                    </span>
+                  </div>
+                  {/* Range slider to drag divider smoothly */}
+                  <div className="w-full max-w-xs flex items-center gap-2 px-2">
+                    <span className="text-[10px] text-stone-400 font-mono">0%</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={splitPercent}
+                      onChange={(e) => setSplitPercent(Number(e.target.value))}
+                      className="w-full h-1.5 bg-[#222736] rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                    />
+                    <span className="text-[10px] text-stone-400 font-mono">100%</span>
+                  </div>
                 </div>
               ) : (
                 <div className="relative flex flex-col items-center justify-center">
@@ -4982,11 +5269,11 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
             <div className="space-y-3 pt-1 animate-in fade-in zoom-in-95 duration-200">
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="p-2.5 rounded-2xl bg-[#181C2B] border border-[#2B3248] text-stone-300">
-                  <p className="text-[10px] text-stone-400">Peso Original</p>
+                  <p className="text-[10px] text-stone-400">{t('workspace.originalWeight', 'Peso Original')}</p>
                   <p className="font-bold text-white">{formatFileSize(result.originalSize)}</p>
                 </div>
                 <div className="p-2.5 rounded-2xl bg-[#10B981]/15 border border-[#10B981] text-[#34D399]">
-                  <p className="text-[10px] text-[#A7F3D0]">Nuevo Peso</p>
+                  <p className="text-[10px] text-[#A7F3D0]">{t('workspace.newWeight', 'Nuevo Peso')}</p>
                   <p className="font-bold text-white">
                     {formatFileSize(result.newSize)}
                     {result.newSize < result.originalSize && (
@@ -5006,19 +5293,87 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
                   className="flex-1 flex items-center justify-center gap-2 py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#10B981] via-[#059669] to-[#047857] hover:from-[#059669] hover:to-[#047857] text-white font-black text-xs sm:text-sm border border-[#34D399]/60 shadow-xl transition-all min-h-[48px] animate-blink-glow-green cursor-pointer"
                 >
                   <Download className="h-4 w-4" />
-                  <span>Descargar {result.format}</span>
+                  <span>{t('workspace.download', 'Descargar')} {result.format}</span>
                 </button>
+
+                {/* Copiar al Portapapeles (Universal Clipboard copy) */}
+                {!result.blob.type.startsWith('audio/') && (
+                  <button
+                    type="button"
+                    id="btn-copy-processed"
+                    onClick={handleCopyImage}
+                    className="flex items-center justify-center gap-1.5 px-3.5 py-3 rounded-2xl bg-[#1E2333] hover:bg-[#2B3248] text-white border border-[#2B3248] transition-all min-h-[48px] text-xs font-semibold cursor-pointer"
+                    title="Copiar imagen directamente al portapapeles"
+                  >
+                    {isCopied ? (
+                      <>
+                        <Check className="h-4 w-4 text-[#10B981]" />
+                        <span className="hidden sm:inline text-[#34D399]">¡Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4 text-stone-300" />
+                        <span className="hidden sm:inline">Copiar</span>
+                      </>
+                    )}
+                  </button>
+                )}
 
                 <button
                   type="button"
                   id="btn-share-processed"
                   onClick={handleShare}
-                  className="flex items-center justify-center p-3 rounded-2xl bg-[#1E2333] hover:bg-[#2B3248] text-white border border-[#2B3248] transition-all min-h-[48px] min-w-[48px]"
-                  title="Compartir"
+                  className="flex items-center justify-center p-3 rounded-2xl bg-[#1E2333] hover:bg-[#2B3248] text-white border border-[#2B3248] transition-all min-h-[48px] min-w-[48px] cursor-pointer"
+                  title={t('workspace.share', 'Compartir')}
                 >
                   <Share2 className="h-4 w-4" />
                 </button>
               </div>
+
+              {/* Pipeline: Continuar editando este resultado en otra herramienta sin volver a subir */}
+              {onChainResult && result && !result.blob.type.startsWith('audio/') && (
+                <div className="pt-2.5 border-t border-[#232B3E] space-y-2 text-left">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-stone-300 flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+                      <span>{t('workspace.continueEditing', 'Seguir editando este resultado con:')}</span>
+                    </span>
+                    <span className="text-[10px] text-stone-400 font-mono">1-clic directo</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    {[
+                      { id: 'recolor-tools', name: 'Cambiar Color', icon: Pipette, color: 'hover:border-cyan-500/60 hover:text-cyan-300' },
+                      { id: 'effects-tools', name: 'Filtros y FX', icon: Wand2, color: 'hover:border-rose-500/60 hover:text-rose-300' },
+                      { id: 'watermark-tools', name: 'Marca de agua', icon: ShieldAlert, color: 'hover:border-amber-500/60 hover:text-amber-300' },
+                      { id: 'optimize-tools', name: 'Comprimir', icon: TrendingDown, color: 'hover:border-emerald-500/60 hover:text-emerald-300' },
+                      { id: 'cut-half-tools', name: 'Cortar Mitad', icon: Split, color: 'hover:border-cyan-500/60 hover:text-cyan-300' },
+                      { id: 'enhance-tools', name: 'Supernitidez', icon: Sparkles, color: 'hover:border-amber-500/60 hover:text-amber-300' },
+                      { id: 'converter-tools', name: 'Convertidor', icon: RefreshCw, color: 'hover:border-teal-500/60 hover:text-teal-300' },
+                      { id: 'analyzer-tools', name: 'EXIF & Limpiar', icon: ShieldCheck, color: 'hover:border-blue-500/60 hover:text-blue-300' }
+                    ]
+                      .filter((item) => item.id !== tool.id)
+                      .slice(0, 4)
+                      .map((chainItem) => {
+                        const IconComponent = chainItem.icon;
+                        return (
+                          <button
+                            key={chainItem.id}
+                            type="button"
+                            onClick={() => {
+                              const chainedFile = new File([result.blob], result.fileName, { type: result.blob.type });
+                              onChainResult(chainedFile, chainItem.id);
+                            }}
+                            className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-[#171B2A] border border-[#262C3E] text-stone-300 text-[11px] font-medium transition-all cursor-pointer ${chainItem.color}`}
+                          >
+                            <IconComponent className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{chainItem.name}</span>
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
 
               {tool.id === 'cut-half-tools' && (
                 <button
@@ -5175,6 +5530,70 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
               >
                 Entendido
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Zoom e Inspección Pantalla Completa */}
+      {isZoomModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-5xl h-[90vh] rounded-3xl bg-[#0D0F17] border border-[#2B354C] shadow-2xl flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#20273A] bg-[#121522]">
+              <div className="flex items-center gap-2.5">
+                <Maximize2 className="h-4 w-4 text-cyan-400" />
+                <h3 className="text-sm font-black text-white">
+                  Inspección de Detalle y Transparencia
+                </h3>
+                <span className="text-[10px] font-mono text-cyan-300 px-2 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/40">
+                  {Math.round(zoomScale * 100)}%
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setZoomScale((z) => Math.max(0.5, z - 0.5))}
+                  disabled={zoomScale <= 0.5}
+                  className="p-1.5 rounded-xl bg-[#1A2030] hover:bg-[#242C42] text-stone-300 disabled:opacity-40 border border-[#2B354C] cursor-pointer"
+                  title="Alejar"
+                >
+                  <ZoomOut className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoomScale(1)}
+                  className="px-2.5 py-1 rounded-xl bg-[#1A2030] hover:bg-[#242C42] text-xs font-mono text-stone-300 border border-[#2B354C] cursor-pointer"
+                >
+                  1x
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoomScale((z) => Math.min(3, z + 0.5))}
+                  disabled={zoomScale >= 3}
+                  className="p-1.5 rounded-xl bg-[#1A2030] hover:bg-[#242C42] text-stone-300 disabled:opacity-40 border border-[#2B354C] cursor-pointer"
+                  title="Acercar"
+                >
+                  <ZoomIn className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsZoomModalOpen(false)}
+                  className="p-1.5 rounded-xl bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-500/40 ml-2 cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Canvas / Image Display area with checkerboard background */}
+            <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-[radial-gradient(#1e2438_1px,transparent_1px)] [background-size:16px_16px]">
+              <img
+                src={result ? result.url : fileInfo.previewUrl}
+                alt="Vista detallada"
+                style={{ transform: `scale(${zoomScale})`, transformOrigin: 'center center' }}
+                className="max-h-[75vh] w-auto max-w-none transition-transform duration-150 rounded-lg shadow-2xl"
+              />
             </div>
           </div>
         </div>

@@ -21,6 +21,7 @@ import { exportCanvasToFormat, formatFileSize } from '../utils/mediaEngine';
 import { notifyUser } from '../utils/notifications';
 import { saveToHistory } from '../utils/historyStorage';
 import { ProcessResult } from '../types';
+import { useLanguage } from '../context/LanguageContext';
 
 interface InteractiveBgEditorProps {
   file: File;
@@ -34,6 +35,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
   previewUrl,
   onApplyResult
 }) => {
+  const { t } = useLanguage();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const originalImageRef = useRef<HTMLImageElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -548,7 +550,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
             }`}
           >
             <Wand2 className="h-4 w-4 text-[#34D399]" />
-            <span>Selección Mágica</span>
+            <span>{t('interactive.magicWand', 'Selección Mágica')}</span>
           </button>
 
           {/* Tool 2: Borrador con Dedo */}
@@ -563,7 +565,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
             }`}
           >
             <Eraser className="h-4 w-4 text-[#34D399]" />
-            <span>Borrar con Dedo</span>
+            <span>{t('interactive.fingerBrush', 'Borrar con Dedo')}</span>
           </button>
 
           {/* Tool 3: Pincel Restaurador */}
@@ -578,7 +580,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
             }`}
           >
             <Paintbrush className="h-4 w-4 text-[#60A5FA]" />
-            <span>Restaurar</span>
+            <span>{t('interactive.restore', 'Restaurar')}</span>
           </button>
 
           {/* Auto AI Button */}
@@ -589,7 +591,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-[#14261C] hover:bg-[#1A3326] text-[#34D399] border border-[#10B981]/50 transition-all cursor-pointer"
           >
             <Sparkles className={`h-4 w-4 ${isAutoProcessing ? 'animate-spin' : ''}`} />
-            <span>{isAutoProcessing ? 'Recortando...' : 'Auto Recorte'}</span>
+            <span>{isAutoProcessing ? t('interactive.cutting', 'Recortando...') : t('interactive.autoCut', 'Auto Recorte')}</span>
           </button>
         </div>
 
@@ -600,7 +602,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
             onClick={handleUndo}
             disabled={historyIndex <= 0}
             className="p-2 rounded-xl bg-[#181C2B] border border-[#262C3E] text-stone-300 hover:text-white disabled:opacity-40 disabled:pointer-events-none transition-colors"
-            title="Deshacer (Ctrl+Z)"
+            title={t('workspace.undo', 'Deshacer (Ctrl+Z)')}
           >
             <Undo2 className="h-4 w-4" />
           </button>
@@ -609,7 +611,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
             onClick={handleRedo}
             disabled={historyIndex >= history.length - 1}
             className="p-2 rounded-xl bg-[#181C2B] border border-[#262C3E] text-stone-300 hover:text-white disabled:opacity-40 disabled:pointer-events-none transition-colors"
-            title="Rehacer (Ctrl+Y)"
+            title={t('workspace.redo', 'Rehacer (Ctrl+Y)')}
           >
             <Redo2 className="h-4 w-4" />
           </button>
@@ -617,7 +619,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
             type="button"
             onClick={handleReset}
             className="p-2 rounded-xl bg-[#181C2B] border border-[#262C3E] text-stone-300 hover:text-white transition-colors"
-            title="Restablecer original"
+            title={t('workspace.reset', 'Restablecer original')}
           >
             <RotateCcw className="h-4 w-4" />
           </button>
@@ -692,7 +694,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
                 type="button"
                 onClick={() => setZoom((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
                 className="p-1 text-stone-300 hover:text-white"
-                title="Reducir zoom"
+                title={t('interactive.zoomOut', 'Reducir zoom')}
               >
                 <ZoomOut className="h-3.5 w-3.5" />
               </button>
@@ -703,7 +705,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
                 type="button"
                 onClick={() => setZoom((z) => Math.min(3, Number((z + 0.25).toFixed(2))))}
                 className="p-1 text-stone-300 hover:text-white"
-                title="Aumentar zoom"
+                title={t('interactive.zoomIn', 'Aumentar zoom')}
               >
                 <ZoomIn className="h-3.5 w-3.5" />
               </button>
@@ -711,7 +713,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
                 type="button"
                 onClick={() => setZoom(1)}
                 className="p-1 text-stone-300 hover:text-white ml-1 border-l border-[#2B3248] pl-1.5"
-                title="Ajustar tamaño (100%)"
+                title={t('interactive.fit', 'Ajustar tamaño (100%)')}
               >
                 <Maximize2 className="h-3.5 w-3.5" />
               </button>
@@ -726,19 +728,19 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
                 onTouchStart={() => setShowOriginal(true)}
                 onTouchEnd={() => setShowOriginal(false)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#141722]/90 backdrop-blur-md text-xs font-bold text-stone-200 border border-[#2B3248] shadow-lg hover:text-white active:bg-[#10B981] active:text-black transition-colors"
-                title="Mantén presionado para ver la imagen original"
+                title={t('interactive.holdOriginal', 'Mantén presionado para ver la imagen original')}
               >
                 <Eye className="h-3.5 w-3.5" />
-                <span>Ver Original</span>
+                <span>{t('interactive.viewOriginal', 'Ver Original')}</span>
               </button>
             </div>
 
             {/* Top helper notification */}
             <div className="absolute top-3 inset-x-3 pointer-events-none flex justify-center z-10">
               <div className="bg-black/75 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 text-[11px] text-[#A7F3D0] font-medium shadow-md">
-                {activeTool === 'magic' && '🪄 Toca o haz clic sobre el fondo para eliminarlo automáticamente'}
-                {activeTool === 'brush' && '👆 Pasa el dedo o ratón sobre las zonas que desees borrar'}
-                {activeTool === 'restore' && '🖌️ Pasa el dedo para restaurar y recuperar partes borradas'}
+                {activeTool === 'magic' && t('interactive.magicTip', '🪄 Toca o haz clic sobre el fondo para eliminarlo automáticamente')}
+                {activeTool === 'brush' && t('interactive.brushTip', '👆 Pasa el dedo o ratón sobre las zonas que desees borrar')}
+                {activeTool === 'restore' && t('interactive.restoreTip', '🖌️ Pasa el dedo para restaurar y recuperar partes borradas')}
               </div>
             </div>
           </div>
@@ -747,7 +749,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
           <div className="flex items-center justify-between p-2.5 rounded-2xl bg-[#141722] border border-[#222736] text-xs">
             <span className="text-stone-300 font-semibold flex items-center gap-1.5">
               <Layers className="h-3.5 w-3.5 text-[#10B981]" />
-              Fondo de visualización:
+              {t('interactive.previewBg', 'Fondo de visualización:')}
             </span>
             <div className="flex items-center gap-1.5">
               <button
@@ -757,7 +759,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
                   bgPreviewType === 'checker' ? 'bg-[#14261C] border-[#10B981] text-[#34D399]' : 'border-[#2B3248] text-stone-400'
                 }`}
               >
-                Ajedrez (Alfa)
+                {t('interactive.checker', 'Ajedrez (Alfa)')}
               </button>
               <button
                 type="button"
@@ -767,7 +769,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
                 }`}
               >
                 <span className="h-2.5 w-2.5 rounded-full bg-white border border-stone-600" />
-                Blanco
+                {t('interactive.white', 'Blanco')}
               </button>
               <button
                 type="button"
@@ -777,7 +779,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
                 }`}
               >
                 <span className="h-2.5 w-2.5 rounded-full bg-black border border-stone-600" />
-                Negro
+                {t('interactive.black', 'Negro')}
               </button>
               <button
                 type="button"
@@ -787,7 +789,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
                 }`}
               >
                 <span className="h-2.5 w-2.5 rounded-full bg-[#00FF00]" />
-                Chroma
+                {t('interactive.chroma', 'Chroma')}
               </button>
             </div>
           </div>
@@ -798,10 +800,10 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
           <div className="flex items-center justify-between pb-2 border-b border-[#222736]">
             <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
               <Sliders className="h-4 w-4 text-[#10B981]" />
-              <span>Ajustes de Herramienta</span>
+              <span>{t('interactive.toolSettings', 'Ajustes de Herramienta')}</span>
             </h3>
             <span className="text-[10px] font-bold text-[#34D399] bg-[#14261C] px-2 py-0.5 rounded-full border border-[#10B981]/40">
-              {activeTool === 'magic' ? 'VARITA MÁGICA' : activeTool === 'brush' ? 'BORRADOR DEDO' : 'RESTAURADOR'}
+              {activeTool === 'magic' ? t('interactive.magicWand', 'VARITA MÁGICA').toUpperCase() : activeTool === 'brush' ? t('interactive.fingerBrush', 'BORRADOR DEDO').toUpperCase() : t('interactive.restore', 'RESTAURADOR').toUpperCase()}
             </span>
           </div>
 
@@ -810,9 +812,9 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
             <div className="space-y-3">
               <div>
                 <div className="flex justify-between text-xs text-stone-300 mb-1 font-medium">
-                  <span>Tolerancia de Selección Mágica ({magicTolerance}%)</span>
+                  <span>{t('interactive.tolerance', 'Tolerancia de Selección Mágica')} ({magicTolerance}%)</span>
                   <span className="text-[#34D399] font-mono font-bold">
-                    {magicTolerance < 20 ? 'Estricto' : magicTolerance < 50 ? 'Equilibrado' : 'Amplio'}
+                    {magicTolerance < 20 ? t('interactive.strict', 'Estricto') : magicTolerance < 50 ? t('interactive.balanced', 'Equilibrado') : t('interactive.broad', 'Amplio')}
                   </span>
                 </div>
                 <input
@@ -824,13 +826,13 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
                   className="w-full accent-[#10B981]"
                 />
                 <p className="text-[10px] text-stone-400 mt-1">
-                  Controla qué tan sensible es la varita a variaciones de sombra y textura del color tocado.
+                  {t('interactive.toleranceDesc', 'Controla qué tan sensible es la varita a variaciones de sombra y textura del color tocado.')}
                 </p>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-stone-300 mb-1.5">
-                  Modo de Selección
+                  {t('interactive.selectionMode', 'Modo de Selección')}
                 </label>
                 <div className="grid grid-cols-2 gap-1.5">
                   <button
@@ -842,8 +844,8 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
                         : 'bg-[#181C2B] border-[#262C3E] text-stone-300'
                     }`}
                   >
-                    <p className="font-bold">Continuo</p>
-                    <p className="text-[9px] text-stone-400">Solo la zona tocada</p>
+                    <p className="font-bold">{t('interactive.contiguous', 'Continuo')}</p>
+                    <p className="text-[9px] text-stone-400">{t('interactive.contiguousDesc', 'Solo la zona tocada')}</p>
                   </button>
 
                   <button
@@ -855,8 +857,8 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
                         : 'bg-[#181C2B] border-[#262C3E] text-stone-300'
                     }`}
                   >
-                    <p className="font-bold">Global</p>
-                    <p className="text-[9px] text-stone-400">Todo el color igual</p>
+                    <p className="font-bold">{t('interactive.global', 'Global')}</p>
+                    <p className="text-[9px] text-stone-400">{t('interactive.globalDesc', 'Todo el color igual')}</p>
                   </button>
                 </div>
               </div>
@@ -868,7 +870,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
             <div className="space-y-3">
               <div>
                 <div className="flex justify-between text-xs text-stone-300 mb-1 font-medium">
-                  <span>Grosor del Pincel / Dedo ({brushSize}px)</span>
+                  <span>{t('interactive.brushThickness', 'Grosor del Pincel / Dedo')} ({brushSize}px)</span>
                   <div
                     className="rounded-full bg-[#10B981]"
                     style={{ width: Math.min(20, brushSize / 2), height: Math.min(20, brushSize / 2) }}
@@ -905,9 +907,9 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
           {/* Export Format Selection */}
           <div className="pt-2 border-t border-[#262C3E] space-y-2">
             <label className="block text-xs font-semibold text-stone-300 flex items-center justify-between">
-              <span>Formato de Descarga</span>
+              <span>{t('interactive.downloadFormat', 'Formato de Descarga')}</span>
               <span className="text-[10px] text-[#34D399] font-mono font-bold uppercase">
-                {exportFormat} {exportFormat !== 'jpg' ? '(Transparente)' : '(Sólido)'}
+                {exportFormat} {exportFormat !== 'jpg' ? `(${t('interactive.transparent', 'Transparente')})` : `(${t('interactive.solid', 'Sólido')})`}
               </span>
             </label>
             <div className="grid grid-cols-4 gap-1">
@@ -945,7 +947,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
               className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#10B981] via-[#059669] to-[#047857] hover:from-[#059669] hover:to-[#047857] text-white font-black text-xs sm:text-sm border border-[#34D399]/60 shadow-xl transition-all min-h-[48px] animate-blink-glow-green cursor-pointer"
             >
               <Download className="h-4 w-4" />
-              <span>Descargar Imagen Editada</span>
+              <span>{t('interactive.downloadEdited', 'Descargar Imagen Editada')}</span>
             </button>
 
             <button
@@ -954,7 +956,7 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
               className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-[#181C2B] hover:bg-[#202638] text-xs font-semibold text-stone-300 hover:text-white border border-[#262C3E] transition-all"
             >
               <Share2 className="h-3.5 w-3.5 text-[#10B981]" />
-              <span>Compartir archivo</span>
+              <span>{t('interactive.shareFile', 'Compartir archivo')}</span>
             </button>
           </div>
         </div>

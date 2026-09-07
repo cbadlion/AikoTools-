@@ -63,15 +63,24 @@ export const LeftToolsDrawer: React.FC<LeftToolsDrawerProps> = ({
       const matchesCategory =
         selectedCategory === 'all' || tool.category === selectedCategory;
       const q = searchQuery.toLowerCase().trim();
+      if (!q) return matchesCategory;
+
+      const translatedName = t(`tool.${tool.id}.name`, tool.name).toLowerCase();
+      const translatedSub = t(`tool.${tool.id}.subtitle`, tool.subtitle).toLowerCase();
+      const translatedCat = t(`cat.${tool.category}`, tool.category).toLowerCase();
+
       const matchesSearch =
-        !q ||
         tool.name.toLowerCase().includes(q) ||
         tool.subtitle.toLowerCase().includes(q) ||
         tool.description.toLowerCase().includes(q) ||
-        tool.category.toLowerCase().includes(q);
+        tool.category.toLowerCase().includes(q) ||
+        translatedName.includes(q) ||
+        translatedSub.includes(q) ||
+        translatedCat.includes(q);
+
       return matchesCategory && matchesSearch;
     });
-  }, [tools, selectedCategory, searchQuery]);
+  }, [tools, selectedCategory, searchQuery, t]);
 
   const getToolIcon = (iconName: string, toolId?: string) => {
     const iconClass = 'h-4 w-4 stroke-[2.2]';
@@ -151,10 +160,10 @@ export const LeftToolsDrawer: React.FC<LeftToolsDrawerProps> = ({
             </div>
             <div>
               <h2 className="text-sm font-bold text-white tracking-tight">
-                Herramientas <span style={{ color: theme.primary }}>Aiko</span>
+                {t('drawer.toolsAiko', 'Herramientas Aiko')}
               </h2>
               <p className="text-[10px] text-stone-400 font-mono">
-                100% en tu dispositivo
+                {t('drawer.localDevice', '100% en tu dispositivo')}
               </p>
             </div>
           </div>
@@ -163,7 +172,7 @@ export const LeftToolsDrawer: React.FC<LeftToolsDrawerProps> = ({
             onClick={onClose}
             id="btn-close-tools-drawer"
             className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#181D30] text-stone-400 hover:text-white hover:bg-[#252E4C] transition-colors cursor-pointer"
-            title="Cerrar"
+            title={t('drawer.close', 'Cerrar')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -178,7 +187,7 @@ export const LeftToolsDrawer: React.FC<LeftToolsDrawerProps> = ({
               id="drawer-search-input"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar herramienta por nombre..."
+              placeholder={t('drawer.searchPlaceholder', 'Buscar herramienta por nombre...')}
               className="w-full rounded-xl bg-[#151929] border border-[#263048] pl-9 pr-8 py-2 text-xs text-white placeholder:text-stone-500 focus:border-stone-400 focus:outline-none shadow-xs"
               autoFocus
             />
@@ -211,7 +220,7 @@ export const LeftToolsDrawer: React.FC<LeftToolsDrawerProps> = ({
                       : 'bg-[#151929] border border-[#263048] text-stone-400 hover:text-white hover:bg-[#1D2338]'
                   }`}
                 >
-                  {pill.label}
+                  {t(`cat.${pill.id}`, pill.label)}
                 </button>
               );
             })}
@@ -224,10 +233,10 @@ export const LeftToolsDrawer: React.FC<LeftToolsDrawerProps> = ({
             <div className="py-12 text-center text-stone-400 space-y-2">
               <Search className="h-8 w-8 mx-auto text-stone-500 opacity-50" />
               <p className="text-xs font-bold text-stone-200">
-                No se encontraron herramientas
+                {t('drawer.noResults', 'No se encontraron herramientas')}
               </p>
               <p className="text-[11px] text-stone-400">
-                Prueba con otro término como "GIF", "Video" o "WebP"
+                {t('tools.tryAnother', 'Intenta buscar por "Fondo", "Conversor", "Filtros", "Video" o limpia la búsqueda.')}
               </p>
               <button
                 onClick={() => {
@@ -236,7 +245,7 @@ export const LeftToolsDrawer: React.FC<LeftToolsDrawerProps> = ({
                 }}
                 className="mt-2 text-xs font-bold text-indigo-400 hover:underline cursor-pointer"
               >
-                Restablecer búsqueda
+                {t('tools.clearSearch', 'Limpiar búsqueda')}
               </button>
             </div>
           ) : (
@@ -280,7 +289,7 @@ export const LeftToolsDrawer: React.FC<LeftToolsDrawerProps> = ({
                           style={{ color: isSelected ? hex : undefined }}
                           className={`text-xs font-bold truncate ${isSelected ? '' : 'text-white'}`}
                         >
-                          {tool.name}
+                          {t(`tool.${tool.id}.name`, tool.name)}
                         </span>
                         <span
                           style={{
@@ -292,11 +301,11 @@ export const LeftToolsDrawer: React.FC<LeftToolsDrawerProps> = ({
                             isSelected ? '' : 'text-stone-400 bg-[#161B2B] border-[#252D42]'
                           }`}
                         >
-                          {tool.category}
+                          {t(`cat.${tool.category}`, tool.category)}
                         </span>
                       </div>
                       <p className="text-[11px] text-stone-400 truncate mt-0.5">
-                        {tool.subtitle}
+                        {t(`tool.${tool.id}.subtitle`, tool.subtitle)}
                       </p>
                     </div>
                   </div>
@@ -316,7 +325,7 @@ export const LeftToolsDrawer: React.FC<LeftToolsDrawerProps> = ({
         {/* Drawer Footer Info */}
         <div className="border-t border-[#1E253A] p-3 bg-[#121626] text-center">
           <p className="text-[10px] font-mono text-stone-400 uppercase tracking-wider font-semibold">
-            {tools.length} HERRAMIENTAS · 100% LOCAL Y PRIVADO
+            {tools.length} {t('drawer.toolsAiko', 'HERRAMIENTAS')} · {t('upload.privateNotice', '100% LOCAL Y PRIVADO')}
           </p>
         </div>
       </aside>

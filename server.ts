@@ -423,7 +423,7 @@ async function startServer() {
       }
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.7-flash",
+        model: "gemini-3.8-flash",
         contents: `You are an expert AI prompt engineer for image generators.
 Expand and enhance the following simple idea into a vivid, descriptive, photographic and artistic prompt in English (30-60 words).
 Include camera angle, lighting, textures, depth, and atmospheric mood suited for the "${style}" style.
@@ -474,7 +474,7 @@ In Spanish, provide:
 Keep formatting clean, scannable, and modern with Markdown bullets and bold text.`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.7-flash",
+        model: "gemini-3.8-flash",
         contents: { parts: [imagePart, { text: customPrompt }] }
       });
 
@@ -529,7 +529,7 @@ Return structured JSON with keys:
 - reply (string, rich Markdown with formatting if answering questions)
 - action (object or null, with properties: type, toolId, params)`;
 
-      // If user uploaded an image and provided base64 data, use multimodal Gemini 3.7 Flash!
+      // If user uploaded an image and provided base64 data, use multimodal Gemini 3.8 Flash!
       let userContents: any = `User message: "${prompt}". File attached: ${hasFile ? (fileName || fileType || 'Yes') : 'No'}.`;
       if (base64Image && typeof base64Image === 'string') {
         const cleanBase64 = base64Image.replace(/^data:[^;]+;base64,/, '');
@@ -542,8 +542,8 @@ Return structured JSON with keys:
         };
       }
 
-      // High-speed model fallback chain: gemini-3.6-flash -> gemini-3.7-flash -> gemini-3.1-flash-lite
-      const candidateModels = ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.1-flash-lite"];
+      // High-speed model fallback chain: gemini-3.8-flash -> gemini-3.1-flash-lite
+      const candidateModels = ["gemini-3.8-flash", "gemini-3.1-flash-lite"];
       let parsedResult = null;
 
       for (const model of candidateModels) {

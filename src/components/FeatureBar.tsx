@@ -1,33 +1,36 @@
 import React from 'react';
 import { ShieldCheck, Zap, Ban, Sparkles } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 
 export const FeatureBar: React.FC = () => {
+  const { t } = useLanguage();
+
   const features = [
     {
       icon: Zap,
-      title: 'Procesamiento en tu móvil',
-      desc: 'Todo se ejecuta directamente en el navegador de tu celular con aceleración gráfica.',
+      title: t('feature.local.title', 'Procesamiento en tu móvil'),
+      desc: t('feature.local.desc', 'Todo se ejecuta directamente en el navegador de tu celular con aceleración gráfica.'),
       color: 'text-amber-400',
       bg: 'bg-amber-500/10 border-amber-500/20'
     },
     {
       icon: Ban,
-      title: '0% Publicidad',
-      desc: 'Sin banners invasivos, anuncios emergentes ni cuentas regresivas.',
+      title: t('feature.noads.title', '0% Publicidad'),
+      desc: t('feature.noads.desc', 'Sin banners invasivos, anuncios emergentes ni cuentas regresivas.'),
       color: 'text-cyan-400',
       bg: 'bg-cyan-500/10 border-cyan-500/20'
     },
     {
       icon: ShieldCheck,
-      title: 'Ahorro de datos móviles',
-      desc: 'Al no subir tus fotos a la nube, no gastas megas de tu plan telefónico.',
+      title: t('feature.data.title', 'Ahorro de datos móviles'),
+      desc: t('feature.data.desc', 'Al no subir tus fotos a la nube, no gastas megas de tu plan telefónico.'),
       color: 'text-emerald-400',
       bg: 'bg-emerald-500/10 border-emerald-500/20'
     },
     {
       icon: Sparkles,
-      title: 'Máxima resolución',
-      desc: 'Tus fotos y videos mantienen la nitidez y calidad nativa de tu cámara.',
+      title: t('feature.quality.title', 'Máxima resolución'),
+      desc: t('feature.quality.desc', 'Tus fotos y videos mantienen la nitidez y calidad nativa de tu cámara.'),
       color: 'text-indigo-400',
       bg: 'bg-indigo-500/10 border-indigo-500/20'
     }

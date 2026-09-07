@@ -18,9 +18,9 @@ export const Footer: React.FC = () => {
               <Lock className="h-4 w-4" />
             </div>
             <div className="space-y-0.5">
-              <h4 className="text-xs font-bold text-white">100% Privado en Navegador</h4>
+              <h4 className="text-xs font-bold text-white">{t('footer.privateTitle', '100% Privado en Navegador')}</h4>
               <p className="text-[11px] text-stone-400 leading-tight">
-                Tus archivos nunca viajan a la nube ni a servidores externos.
+                {t('footer.privateDesc', 'Tus archivos nunca viajan a la nube ni a servidores externos.')}
               </p>
             </div>
           </div>
@@ -30,9 +30,9 @@ export const Footer: React.FC = () => {
               <Cpu className="h-4 w-4" />
             </div>
             <div className="space-y-0.5">
-              <h4 className="text-xs font-bold text-white">Aceleración Wasm & Canvas</h4>
+              <h4 className="text-xs font-bold text-white">{t('footer.wasmTitle', 'Aceleración Wasm & Canvas')}</h4>
               <p className="text-[11px] text-stone-400 leading-tight">
-                Motor gráfico de alta fidelidad optimizado en tiempo real.
+                {t('footer.wasmDesc', 'Motor gráfico de alta fidelidad optimizado en tiempo real.')}
               </p>
             </div>
           </div>
@@ -42,9 +42,9 @@ export const Footer: React.FC = () => {
               <Zap className="h-4 w-4" />
             </div>
             <div className="space-y-0.5">
-              <h4 className="text-xs font-bold text-white">Sin Anuncios ni Límites</h4>
+              <h4 className="text-xs font-bold text-white">{t('footer.noAdsTitle', 'Sin Anuncios ni Límites')}</h4>
               <p className="text-[11px] text-stone-400 leading-tight">
-                Acceso completo e ilimitado a todas las herramientas.
+                {t('footer.noAdsDesc', 'Acceso completo e ilimitado a todas las herramientas.')}
               </p>
             </div>
           </div>
@@ -65,11 +65,11 @@ export const Footer: React.FC = () => {
                   style={{ color: theme.primary, borderColor: `${theme.primary}40`, backgroundColor: `${theme.primary}15` }}
                   className="px-2 py-0.5 rounded-md text-[9px] font-mono font-bold border"
                 >
-                  PRO v2.5
+                  PRO STUDIO v3.1
                 </span>
               </div>
               <p className="text-[11px] text-stone-400">
-                La navaja suiza multimedia definitiva para creadores y diseñadores.
+                {t('footer.tagline', 'La navaja suiza multimedia definitiva para creadores y diseñadores.')}
               </p>
             </div>
           </div>
@@ -89,15 +89,15 @@ export const Footer: React.FC = () => {
         {/* Bottom copyright line */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] border-t border-[#161B28] pt-6 font-mono text-stone-400">
           <div className="flex items-center gap-1.5">
-            <span>Hecho con</span>
+            <span>{t('footer.madeWith', 'Hecho con')}</span>
             <Heart className="h-3 w-3 text-rose-500 fill-rose-500 inline" />
-            <span>para velocidad, calidad y privacidad absoluta.</span>
+            <span>{t('footer.forSpeedQuality', 'para velocidad, calidad y privacidad absoluta.')}</span>
           </div>
 
           <div className="flex items-center gap-3">
             <span style={{ color: theme.primary }} className="font-bold flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full animate-ping" style={{ backgroundColor: theme.primary }} />
-              Motor Activo
+              {t('footer.activeEngine', 'Motor Activo')}
             </span>
             <span>01 / 01</span>
           </div>
