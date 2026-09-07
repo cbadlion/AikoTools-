@@ -258,3 +258,5 @@ export const ca: Record<string, string> = {
   "upload.vectorSvg": "Vector SVG",
   "upload.readyToProcess": "A punt per processar"
 };
+
+export default ca;

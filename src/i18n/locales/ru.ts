@@ -258,3 +258,5 @@ export const ru: Record<string, string> = {
   "upload.vectorSvg": "Вектор SVG",
   "upload.readyToProcess": "Готов к обработке"
 };
+
+export default ru;

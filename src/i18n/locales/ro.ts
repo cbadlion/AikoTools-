@@ -258,3 +258,5 @@ export const ro: Record<string, string> = {
   "upload.vectorSvg": "Vector SVG",
   "upload.readyToProcess": "Gata de procesat"
 };
+
+export default ro;

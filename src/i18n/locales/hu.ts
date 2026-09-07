@@ -258,3 +258,5 @@ export const hu: Record<string, string> = {
   "upload.vectorSvg": "Vector SVG",
   "upload.readyToProcess": "Feldolgozásra kész"
 };
+
+export default hu;

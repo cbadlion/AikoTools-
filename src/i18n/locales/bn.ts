@@ -258,3 +258,5 @@ export const bn: Record<string, string> = {
   "upload.vectorSvg": "ভেক্টর এসভিজি",
   "upload.readyToProcess": "প্রক্রিয়া করার জন্য প্রস্তুত"
 };
+
+export default bn;

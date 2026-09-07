@@ -258,3 +258,5 @@ export const eu: Record<string, string> = {
   "upload.vectorSvg": "SVG bektoriala",
   "upload.readyToProcess": "Prozesatzeko prest"
 };
+
+export default eu;

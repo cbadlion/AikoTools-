@@ -258,3 +258,5 @@ export const fi: Record<string, string> = {
   "upload.vectorSvg": "Vector SVG",
   "upload.readyToProcess": "Valmis käsiteltäväksi"
 };
+
+export default fi;

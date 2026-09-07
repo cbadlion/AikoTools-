@@ -258,3 +258,5 @@ export const pl: Record<string, string> = {
   "upload.vectorSvg": "Wektor SVG",
   "upload.readyToProcess": "Gotowe do przetworzenia"
 };
+
+export default pl;

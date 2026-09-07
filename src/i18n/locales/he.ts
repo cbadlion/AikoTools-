@@ -258,3 +258,5 @@ export const he: Record<string, string> = {
   "upload.vectorSvg": "וקטור SVG",
   "upload.readyToProcess": "מוכן לעיבוד"
 };
+
+export default he;

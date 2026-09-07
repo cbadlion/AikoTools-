@@ -258,3 +258,5 @@ export const th: Record<string, string> = {
   "upload.vectorSvg": "เวกเตอร์ SVG",
   "upload.readyToProcess": "พร้อมดำเนินการ"
 };
+
+export default th;

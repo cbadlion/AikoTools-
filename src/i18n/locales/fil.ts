@@ -258,3 +258,5 @@ export const fil: Record<string, string> = {
   "upload.vectorSvg": "Vector SVG",
   "upload.readyToProcess": "Handa nang iproseso"
 };
+
+export default fil;

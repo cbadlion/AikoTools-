@@ -258,3 +258,5 @@ export const ar: Record<string, string> = {
   "upload.vectorSvg": "ناقل SVG",
   "upload.readyToProcess": "جاهز للمعالجة"
 };
+
+export default ar;

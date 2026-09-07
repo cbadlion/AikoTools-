@@ -258,3 +258,5 @@ export const tr: Record<string, string> = {
   "upload.vectorSvg": "Vektör SVG",
   "upload.readyToProcess": "İşleme hazır"
 };
+
+export default tr;

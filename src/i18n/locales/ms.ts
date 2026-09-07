@@ -258,3 +258,5 @@ export const ms: Record<string, string> = {
   "upload.vectorSvg": "SVG vektor",
   "upload.readyToProcess": "Sedia untuk diproses"
 };
+
+export default ms;

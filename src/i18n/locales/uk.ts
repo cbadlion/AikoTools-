@@ -258,3 +258,5 @@ export const uk: Record<string, string> = {
   "upload.vectorSvg": "Vector SVG",
   "upload.readyToProcess": "Ready to process"
 };
+
+export default uk;

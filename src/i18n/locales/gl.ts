@@ -258,3 +258,5 @@ export const gl: Record<string, string> = {
   "upload.vectorSvg": "Vector SVG",
   "upload.readyToProcess": "Listo para procesar"
 };
+
+export default gl;

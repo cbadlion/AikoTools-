@@ -258,3 +258,5 @@ export const id = {
   "upload.vectorSvg": "Vektor SVG",
   "upload.readyToProcess": "Siap untuk diproses"
 };
+
+export default id;

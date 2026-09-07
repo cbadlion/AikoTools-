@@ -258,3 +258,5 @@ export const sv: Record<string, string> = {
   "upload.vectorSvg": "Vektor SVG",
   "upload.readyToProcess": "Klar att bearbeta"
 };
+
+export default sv;

@@ -258,3 +258,5 @@ export const el: Record<string, string> = {
   "upload.vectorSvg": "Διάνυσμα SVG",
   "upload.readyToProcess": "Έτοιμο για επεξεργασία"
 };
+
+export default el;

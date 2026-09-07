@@ -258,3 +258,5 @@ export const nl = {
   "upload.vectorSvg": "Vector-SVG",
   "upload.readyToProcess": "Klaar om te verwerken"
 };
+
+export default nl;

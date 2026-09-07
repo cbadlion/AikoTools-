@@ -258,3 +258,5 @@ export const vi = {
   "upload.vectorSvg": "Vectơ SVG",
   "upload.readyToProcess": "Sẵn sàng xử lý"
 };
+
+export default vi;

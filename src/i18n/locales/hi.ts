@@ -258,3 +258,5 @@ export const hi = {
   "upload.vectorSvg": "वेक्टर एसवीजी",
   "upload.readyToProcess": "प्रक्रिया के लिए तैयार"
 };
+
+export default hi;
