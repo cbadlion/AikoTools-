@@ -47,7 +47,8 @@ export type ToolId =
   | 'cut-half-tools'
   | 'enhance-tools'
   | 'smooth-tools'
-  | 'screen-recorder';
+  | 'screen-recorder'
+  | 'batch-webp';
 
 export interface ToolDefinition {
   id: ToolId;

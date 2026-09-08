@@ -115,6 +115,8 @@ export const es: Record<string, string> = {
   "tool.text-tools.subtitle": "Añade tipografías, subtítulos de impacto y leyendas meme",
   "tool.webp-tools.name": "Animación WebP",
   "tool.webp-tools.subtitle": "Crea y optimiza archivos WebP modernos ultraligeros",
+  "tool.batch-webp.name": "Lote de Imágenes a WebP",
+  "tool.batch-webp.subtitle": "Une 50+ imágenes en 1 solo archivo WebP animado o en ZIP",
   "tool.svg-tools.name": "SVG y Vectorial",
   "tool.svg-tools.subtitle": "Convierte vectores a mapa de bits o renderiza a alta resolución",
   "tool.analyzer-tools.name": "Analizador de Metadatos",

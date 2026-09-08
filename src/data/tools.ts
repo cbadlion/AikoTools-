@@ -269,7 +269,22 @@ export const TOOLS: ToolDefinition[] = [
     accentHex: '#0284C7',
     gradient: 'from-sky-600 via-cyan-600 to-blue-700',
     iconBg: 'bg-sky-950/40 text-sky-400 border-sky-500/30',
-    subtools: ['WebP a GIF', 'WebP a PNG', 'WebP a JPG', 'Convertir a WebP']
+    subtools: ['WebP a GIF', 'WebP a PNG', 'WebP a JPG', 'Convertir a WebP', 'Lote a WebP (50+ imágenes)']
+  },
+  {
+    id: 'batch-webp',
+    name: 'Lote de Imágenes a WebP',
+    subtitle: 'Une 50+ imágenes en 1 solo archivo WebP animado o en ZIP.',
+    description: 'Convierte decenas o cientos de fotos e imágenes en un único archivo WebP animado ultra-optimizado o en un paquete .ZIP con compresión inteligente sin pérdida visual.',
+    category: 'webp',
+    iconName: 'CopyCheck',
+    acceptedMime: 'image/*,.webp,.png,.jpg,.jpeg,.gif,.avif,.svg',
+    status: 'DISPONIBLE',
+    isAvailable: true,
+    accentHex: '#0EA5E9',
+    gradient: 'from-sky-500 via-blue-600 to-indigo-600',
+    iconBg: 'bg-sky-950/40 text-sky-400 border-sky-500/30',
+    subtools: ['50 fotos a 1 WebP animado', 'Lote de fotos a WebP ZIP', 'Ajuste de FPS', 'Sticker WhatsApp 512px']
   },
   {
     id: 'svg-tools',
@@ -402,6 +417,7 @@ export const SUBTOOLS_NAV_ITEMS = [
   { id: 'cut-half', label: 'Eliminar Mitad ✂️', targetToolId: 'cut-half-tools' as const, color: '#06B6D4' },
   { id: 'gif-to-mp4', label: 'GIF a MP4', targetToolId: 'video-tools' as const, color: '#B91C1C' },
   { id: 'webp-to-gif', label: 'WebP a GIF', targetToolId: 'webp-tools' as const, color: '#0284C7' },
+  { id: 'batch-webp-nav', label: 'Lote a WebP 🗂️', targetToolId: 'batch-webp' as const, color: '#0EA5E9' },
   { id: 'svg-to-gif', label: 'SVG a Raster', targetToolId: 'svg-tools' as const, color: '#65A30D' },
   { id: 'gif-analyzer', label: 'Analizador GIF', targetToolId: 'analyzer-tools' as const, color: '#DC2626' }
 ];

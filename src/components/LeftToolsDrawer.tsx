@@ -109,6 +109,7 @@ export const LeftToolsDrawer: React.FC<LeftToolsDrawerProps> = ({
     if (toolId === 'enhance-tools') return <Sparkles className={iconClass} />;
     if (toolId === 'smooth-tools') return <Zap className={iconClass} />;
     if (toolId === 'screen-recorder') return <Radio className={iconClass} />;
+    if (toolId === 'batch-webp') return <Layers className={iconClass} />;
 
     switch (iconName) {
       case 'Split': return <Split className={iconClass} />;

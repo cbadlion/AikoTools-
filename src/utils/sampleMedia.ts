@@ -177,3 +177,79 @@ export function generateSampleImage(type: 'portrait' | 'icon' | 'landscape' | 's
     }
   });
 }
+
+/**
+ * Generates an array of sequential sample frames for batch testing (e.g. 12 to 50 frames)
+ */
+export async function generateSampleBatchImages(count: number = 12): Promise<File[]> {
+  const files: File[] = [];
+  const canvas = document.createElement('canvas');
+  canvas.width = 400;
+  canvas.height = 400;
+  const ctx = canvas.getContext('2d')!;
+
+  for (let i = 0; i < count; i++) {
+    const t = i / count;
+    ctx.clearRect(0, 0, 400, 400);
+
+    // Background gradient rotating with time
+    const grad = ctx.createLinearGradient(0, 0, 400, 400);
+    const hue1 = Math.round(t * 360);
+    const hue2 = Math.round((t * 360 + 90) % 360);
+    grad.addColorStop(0, `hsl(${hue1}, 80%, 15%)`);
+    grad.addColorStop(1, `hsl(${hue2}, 90%, 25%)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 400, 400);
+
+    // Orbiting particles / glowing core
+    const cx = 200 + Math.cos(t * Math.PI * 2) * 60;
+    const cy = 200 + Math.sin(t * Math.PI * 2) * 60;
+
+    // Outer ring
+    ctx.strokeStyle = `hsl(${(hue1 + 180) % 360}, 100%, 70%)`;
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(200, 200, 100, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Center pulsating orb
+    const radius = 35 + Math.sin(t * Math.PI * 4) * 12;
+    const orbGrad = ctx.createRadialGradient(cx, cy, 5, cx, cy, radius);
+    orbGrad.addColorStop(0, '#FFFFFF');
+    orbGrad.addColorStop(0.5, `hsl(${hue1}, 100%, 65%)`);
+    orbGrad.addColorStop(1, 'transparent');
+    ctx.fillStyle = orbGrad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Frame counter badge
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+    ctx.roundRect ? ctx.roundRect(140, 260, 120, 36, 18) : ctx.rect(140, 260, 120, 36);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 16px Outfit, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`Frame ${i + 1}/${count}`, 200, 278);
+
+    // Mini cute logo text
+    ctx.fillStyle = '#38BDF8';
+    ctx.font = 'bold 12px monospace';
+    ctx.fillText('AikoTools WebP', 200, 320);
+
+    const blob = await new Promise<Blob>((res) => {
+      canvas.toBlob((b) => res(b!), 'image/png');
+    });
+
+    const padIndex = String(i + 1).padStart(3, '0');
+    files.push(new File([blob], `frame_${padIndex}.png`, { type: 'image/png' }));
+  }
+
+  return files;
+}
+

@@ -5,14 +5,15 @@ import { formatFileSize } from '../utils/mediaEngine';
 import { notifyUser } from '../utils/notifications';
 import { useLanguage } from '../context/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
-import { generateSampleImage } from '../utils/sampleMedia';
+import { generateSampleImage, generateSampleBatchImages } from '../utils/sampleMedia';
 
 interface UploadZoneProps {
   onFileSelected: (file: File) => void;
+  onFilesSelected?: (files: File[]) => void;
   selectedTool?: ToolDefinition | null;
 }
 
-export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, selectedTool }) => {
+export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, onFilesSelected, selectedTool }) => {
   const { t } = useLanguage();
   const { theme } = useTheme();
   const [isDragging, setIsDragging] = useState(false);
@@ -71,15 +72,23 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, selected
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      startUploadSimulation(file);
+      if (e.dataTransfer.files.length > 1 && onFilesSelected) {
+        onFilesSelected(Array.from(e.dataTransfer.files));
+      } else {
+        const file = e.dataTransfer.files[0];
+        startUploadSimulation(file);
+      }
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      startUploadSimulation(file);
+      if (e.target.files.length > 1 && onFilesSelected) {
+        onFilesSelected(Array.from(e.target.files));
+      } else {
+        const file = e.target.files[0];
+        startUploadSimulation(file);
+      }
     }
   };
 
@@ -144,6 +153,7 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, selected
           ref={fileInputRef}
           id="file-input"
           type="file"
+          multiple
           accept={acceptedFormats}
           onChange={handleFileChange}
           className="hidden"
@@ -265,7 +275,24 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, selected
                   <span className="text-[10px] uppercase font-mono tracking-wider text-stone-400">{t('upload.instantDemo', 'Demo Instantánea')}</span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className={`grid gap-2 ${selectedTool?.id === 'batch-webp' ? 'grid-cols-2 sm:grid-cols-5' : 'grid-cols-2 sm:grid-cols-4'}`}>
+                  {selectedTool?.id === 'batch-webp' && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const batch = await generateSampleBatchImages(12);
+                        if (onFilesSelected) {
+                          onFilesSelected(batch);
+                        } else if (batch.length > 0) {
+                          startUploadSimulation(batch[0]);
+                        }
+                      }}
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-sky-950/50 hover:bg-sky-900/60 border border-sky-500/50 text-xs font-bold text-sky-300 hover:text-white transition-all cursor-pointer shadow-xs col-span-2 sm:col-span-1"
+                    >
+                      <span>🗂️ 12 Fotos Demo</span>
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     onClick={async () => {

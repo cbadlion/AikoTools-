@@ -4,6 +4,7 @@ import { CategoryNav } from './components/CategoryNav';
 import { ToolGrid } from './components/ToolGrid';
 import { UploadZone } from './components/UploadZone';
 import { ActiveToolWorkspace } from './components/ActiveToolWorkspace';
+import { BatchWebPWorkspace } from './components/BatchWebPWorkspace';
 import { LeftToolsDrawer } from './components/LeftToolsDrawer';
 import { SubtoolsBar } from './components/SubtoolsBar';
 import { HistoryDrawer } from './components/HistoryDrawer';
@@ -24,6 +25,7 @@ export function App() {
   const [activeCategory, setActiveCategory] = useState<ToolCategory>('all');
   const [selectedTool, setSelectedTool] = useState<ToolDefinition | null>(TOOLS[0]);
   const [activeFile, setActiveFile] = useState<MediaFileInfo | null>(null);
+  const [batchFiles, setBatchFiles] = useState<File[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -112,6 +114,19 @@ export function App() {
       URL.revokeObjectURL(activeFile.previewUrl);
     }
     setActiveFile(null);
+    setBatchFiles([]);
+  };
+
+  const handleBatchFilesSelected = (files: File[]) => {
+    setBatchFiles(files);
+    const target = TOOLS.find((t) => t.id === 'batch-webp');
+    if (target) {
+      setSelectedTool(target);
+    }
+    const dropzone = document.getElementById('workspace-container');
+    if (dropzone) {
+      dropzone.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   };
 
   const handleSelectTool = (tool: ToolDefinition) => {
@@ -359,7 +374,16 @@ export function App() {
 
         {/* UPLOAD ZONE / ACTIVE PROCESSING WORKSPACE */}
         <section id="workspace-container">
-          {activeFile && selectedTool ? (
+          {selectedTool?.id === 'batch-webp' ? (
+            <BatchWebPWorkspace
+              initialFiles={batchFiles}
+              onClear={() => {
+                setBatchFiles([]);
+                handleClearFile();
+              }}
+              onChainResult={handleSelectResultForWorkspace}
+            />
+          ) : activeFile && selectedTool ? (
             <ActiveToolWorkspace
               tool={selectedTool}
               fileInfo={activeFile}
@@ -370,6 +394,7 @@ export function App() {
           ) : (
             <UploadZone
               onFileSelected={handleFileSelected}
+              onFilesSelected={handleBatchFilesSelected}
               selectedTool={selectedTool}
             />
           )}

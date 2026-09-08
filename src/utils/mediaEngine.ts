@@ -4382,6 +4382,9 @@ export interface SmoothMediaOptions {
   removeDuplicates?: boolean;  // Drop identical/frozen consecutive frames
   outputFormat?: 'auto' | 'gif' | 'webp' | 'mp4';
   quality?: number;            // 0.1 to 1.0 (default 0.92)
+  targetWidth?: number;        // Optional resize width (e.g. 1000 for Vyzer avatar frame)
+  targetHeight?: number;       // Optional resize height (e.g. 1000 for Vyzer avatar frame)
+  vyzerPreset?: boolean;       // Strict <= 30 FPS compliance for Vyzer / Discord avatar frames
   onProgress?: (percent: number) => void;
 }
 
@@ -4453,11 +4456,24 @@ export async function smoothAndAccelerateMedia(
   if (options.onProgress) options.onProgress(10);
 
   const speedMult = Math.max(0.5, Math.min(4.0, options.speedMultiplier ?? 1.0));
-  const targetFps = options.targetFps ?? (options.mode === 'boost-fps' ? 60 : 30);
-  const targetFrameDelayMs = Math.max(16, Math.round(1000 / targetFps));
+  const targetFps = options.vyzerPreset ? 30 : (options.targetFps ?? (options.mode === 'boost-fps' ? 60 : 30));
+  // Safe frame delay in ms:
+  // For 30 FPS, Vyzer and Discord strictly limit framerate to <= 30.0 FPS.
+  // 1000 / 30 = 33.33ms; if 33ms is stored, 1000/33 = 30.30 FPS, triggering Vyzer's rejection error!
+  // Using 34ms guarantees 1000 / 34 = 29.41 FPS <= 30.0 FPS, safely passing validation.
+  const targetFrameDelayMs = targetFps === 30
+    ? 34
+    : targetFps === 60
+      ? 17
+      : targetFps === 24
+        ? 42
+        : targetFps === 15
+          ? 67
+          : Math.max(16, Math.ceil(1000 / targetFps));
 
   const shouldFixBrowserDelay = options.fixBrowserDelay ?? true;
-  const shouldInterpolate = options.interpolateFrames ?? (options.mode === 'motion-blend' || options.mode === 'boost-fps');
+  // If targetFps is 30 or less, do NOT interpolate unless user explicitly enables motion-blend
+  const shouldInterpolate = options.interpolateFrames ?? (options.mode === 'motion-blend' || (options.mode === 'boost-fps' && targetFps >= 50));
   const shouldDropStutter = options.removeDuplicates ?? (options.mode === 'drop-stutter');
 
   const isVideoFile = file.type.startsWith('video/') || /\.(mp4|webm|mov|mkv)$/i.test(file.name);
@@ -4497,7 +4513,7 @@ export async function smoothAndAccelerateMedia(
 
       videoFrames.push({
         canvas: c,
-        delay: Math.max(16, Math.round(targetFrameDelayMs / speedMult))
+        delay: targetFps === 30 ? 34 : Math.max(16, Math.round(targetFrameDelayMs / speedMult))
       });
 
       if (options.onProgress) {
@@ -4613,16 +4629,55 @@ export async function smoothAndAccelerateMedia(
       const current = processedFrames[i];
       const next = processedFrames[(i + 1) % processedFrames.length];
 
-      // Halve the original delay so the playback duration remains identical
-      const halfDelay = Math.max(16, Math.round(current.delay / 2));
-      interpolated.push({ canvas: current.canvas, delay: halfDelay });
+      // CRITICAL FIX: When targetFps is set (e.g. 30 FPS for Vyzer), DO NOT halve delay down to 17ms (59 FPS)!
+      // Using targetFrameDelayMs guarantees the resulting animation stays strictly within the requested FPS!
+      const frameDelay = options.targetFps || options.vyzerPreset
+        ? targetFrameDelayMs
+        : Math.max(16, Math.round(current.delay / 2));
+
+      interpolated.push({ canvas: current.canvas, delay: frameDelay });
 
       // Create intermediate cross-blended motion frame
       const midCanvas = createInterpolatedFrame(current.canvas, next.canvas, 0.5);
-      interpolated.push({ canvas: midCanvas, delay: halfDelay });
+      interpolated.push({ canvas: midCanvas, delay: frameDelay });
     }
 
     processedFrames = interpolated;
+  }
+
+  // ABSOLUTE ENFORCEMENT FOR TARGET FPS & VYZER/DISCORD:
+  // If targetFps or vyzerPreset was specified, guarantee that EVERY frame delay strictly matches targetFrameDelayMs!
+  // For 30 FPS, targetFrameDelayMs is 34ms (1000 / 34 = 29.41 FPS <= 30.0 FPS), guaranteeing Vyzer approval!
+  if (options.targetFps || options.vyzerPreset) {
+    const finalSafeDelay = (options.vyzerPreset || targetFps === 30) ? 34 : targetFrameDelayMs;
+    processedFrames = processedFrames.map((f) => ({
+      ...f,
+      delay: finalSafeDelay
+    }));
+  }
+
+  // D. Canvas Resizing (e.g. 1000x1000 for Vyzer Avatar Frame) preserving transparent alpha channel
+  if (options.targetWidth && options.targetHeight) {
+    const tw = options.targetWidth;
+    const th = options.targetHeight;
+    processedFrames = processedFrames.map((f) => {
+      const rc = document.createElement('canvas');
+      rc.width = tw;
+      rc.height = th;
+      const ctx = rc.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, tw, th);
+        const srcW = f.canvas.width;
+        const srcH = f.canvas.height;
+        const scale = Math.min(tw / srcW, th / srcH);
+        const drawW = Math.round(srcW * scale);
+        const drawH = Math.round(srcH * scale);
+        const offsetX = Math.round((tw - drawW) / 2);
+        const offsetY = Math.round((th - drawH) / 2);
+        ctx.drawImage(f.canvas, offsetX, offsetY, drawW, drawH);
+      }
+      return { canvas: rc, delay: f.delay };
+    });
   }
 
   if (options.onProgress) options.onProgress(70);
@@ -4642,20 +4697,28 @@ export async function smoothAndAccelerateMedia(
       onProgress: (p) => options.onProgress && options.onProgress(70 + Math.round(p * 0.28))
     });
     outExt = 'webp';
-    outFormatLabel = `WebP Ultra-Fluido (${targetFps} FPS)`;
+    outFormatLabel = options.vyzerPreset
+      ? 'WebP (30 FPS Vyzer)'
+      : targetFps === 60
+        ? 'WebP Ultra-Fluido (60 FPS)'
+        : `WebP (${targetFps} FPS)`;
   } else {
     outBlob = await encodeAnimatedGif(processedFrames, {
       onProgress: (p) => options.onProgress && options.onProgress(70 + Math.round(p * 0.28))
     });
     outExt = 'gif';
-    outFormatLabel = `GIF Anti-Lag (${targetFps} FPS)`;
+    outFormatLabel = options.vyzerPreset
+      ? 'GIF (30 FPS Vyzer)'
+      : `GIF (${targetFps} FPS)`;
   }
 
   const timeTakenMs = Math.round(performance.now() - startTime);
   const w = processedFrames[0].canvas.width;
   const h = processedFrames[0].canvas.height;
   const speedLabel = speedMult !== 1.0 ? `_${speedMult}x` : '';
-  const newFileName = `aikotools_fluido_${targetFps}fps${speedLabel}_${baseName}.${outExt}`;
+  const newFileName = options.vyzerPreset
+    ? `aikotools_vyzer_30fps_${baseName}.${outExt}`
+    : `aikotools_fluido_${targetFps}fps${speedLabel}_${baseName}.${outExt}`;
 
   if (options.onProgress) options.onProgress(100);
 
@@ -4669,7 +4732,9 @@ export async function smoothAndAccelerateMedia(
     height: h,
     format: outFormatLabel,
     timeTakenMs,
-    extraInfo: `Fluidez ${targetFps} FPS · ${speedMult}x velocidad · ${processedFrames.length} fotogramas sin lag`
+    extraInfo: options.vyzerPreset
+      ? 'WebP Animado ≤30 FPS (34ms por cuadro) · 100% compatible con Vyzer y Discord'
+      : `Fluidez ${targetFps} FPS · ${speedMult}x velocidad · ${processedFrames.length} fotogramas sin lag`
   };
 }
 

@@ -217,6 +217,8 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
   const [smoothInterpolate, setSmoothInterpolate] = useState<boolean>(true);
   const [smoothDropDuplicates, setSmoothDropDuplicates] = useState<boolean>(true);
   const [smoothOutputFormat, setSmoothOutputFormat] = useState<'auto' | 'webp' | 'gif'>('auto');
+  const [smoothVyzerPreset, setSmoothVyzerPreset] = useState<boolean>(false);
+  const [smoothVyzerResize, setSmoothVyzerResize] = useState<boolean>(false);
 
   // Animation handling states (WebP / GIF Animation preservation)
   const [isAnimatedFile, setIsAnimatedFile] = useState(false);
@@ -1046,12 +1048,15 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
         setProcessProgress(15);
         res = await smoothAndAccelerateMedia(fileInfo.file, {
           mode: smoothMode,
-          targetFps: smoothTargetFps,
+          targetFps: smoothVyzerPreset ? 30 : smoothTargetFps,
           speedMultiplier: smoothSpeedMultiplier,
           fixBrowserDelay: smoothFixBrowserDelay,
-          interpolateFrames: smoothInterpolate,
+          interpolateFrames: smoothVyzerPreset ? false : smoothInterpolate,
           removeDuplicates: smoothDropDuplicates,
-          outputFormat: smoothOutputFormat as any,
+          outputFormat: smoothVyzerPreset ? 'webp' : (smoothOutputFormat as any),
+          vyzerPreset: smoothVyzerPreset,
+          targetWidth: (smoothVyzerPreset && smoothVyzerResize) ? 1000 : undefined,
+          targetHeight: (smoothVyzerPreset && smoothVyzerResize) ? 1000 : undefined,
           onProgress: (p) => setProcessProgress(p)
         });
         setProcessProgress(100);
@@ -4234,19 +4239,95 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
           {tool.id === 'smooth-tools' && (
             <div className="space-y-3.5">
               {/* Informative Header Banner */}
-              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-[#061E28] via-[#0D1726] to-[#0A111E] border border-cyan-500/40 space-y-1.5 shadow-sm">
+              <div className={`p-3.5 rounded-2xl border space-y-1.5 shadow-sm transition-all ${
+                smoothVyzerPreset
+                  ? 'bg-gradient-to-br from-[#06241b] via-[#0b1c20] to-[#0a151b] border-emerald-500/50'
+                  : 'bg-gradient-to-br from-[#061E28] via-[#0D1726] to-[#0A111E] border-cyan-500/40'
+              }`}>
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-                    <Zap className="h-4 w-4 text-cyan-400 animate-pulse" />
+                  <div className={`p-1.5 rounded-lg border ${
+                    smoothVyzerPreset ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+                  }`}>
+                    {smoothVyzerPreset ? <Sparkles className="h-4 w-4" /> : <Zap className="h-4 w-4 text-cyan-400 animate-pulse" />}
                   </div>
                   <div>
-                    <span className="text-xs font-bold text-white block">Motor de Fluidez y Anti-Lag 60 FPS</span>
-                    <span className="text-[10px] text-cyan-300/90 font-mono">Corrige animaciones lentas, bug de 100ms y tirones</span>
+                    <span className="text-xs font-bold text-white block">
+                      {smoothVyzerPreset ? 'Perfil Moldura de Avatar Vyzer (≤ 30 FPS Estricto)' : `Motor de Fluidez y Anti-Lag (${smoothTargetFps} FPS)`}
+                    </span>
+                    <span className={`text-[10px] font-mono ${smoothVyzerPreset ? 'text-emerald-300/90' : 'text-cyan-300/90'}`}>
+                      {smoothVyzerPreset ? 'Formato de salida optimizado: WebP 30 FPS (34ms) compatible con Discord/Vyzer' : 'Corrige animaciones lentas, bug de 100ms y tirones'}
+                    </span>
                   </div>
                 </div>
                 <p className="text-[11px] text-stone-300 leading-relaxed">
-                  ¿Tus GIFs van lentos o se ven trabados? Aumenta los FPS (hasta 60 FPS), corrige el retraso artificial que imponen los navegadores y acelera la reproducción con suavidad de movimiento.
+                  {smoothVyzerPreset
+                    ? 'Configuración calibrada a 34ms por fotograma (29.41 FPS reales) para garantizar que Vyzer y Discord nunca rechacen tu moldura ni la detecten como 59 o 60 FPS.'
+                    : `Aumenta la tasa a ${smoothTargetFps} FPS reales, corrige el retraso artificial que imponen los navegadores y acelera la reproducción con total suavidad.`}
                 </p>
+              </div>
+
+              {/* Perfil Especial Molduras Vyzer / Discord (Límite 30 FPS) */}
+              <div className={`p-3.5 rounded-2xl border transition-all ${
+                smoothVyzerPreset
+                  ? 'bg-gradient-to-r from-emerald-950/80 via-[#0a1e1b] to-cyan-950/80 border-emerald-400/80 shadow-[0_0_15px_rgba(16,185,129,0.25)]'
+                  : 'bg-[#141824] border-[#262C3E]'
+              }`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`p-2 rounded-xl border ${smoothVyzerPreset ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50' : 'bg-stone-800 text-stone-400 border-[#262C3E]'}`}>
+                      <Sparkles className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-white">Perfil Moldura de Avatar (Vyzer / Discord)</span>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          ≤ 30 FPS Estricto
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-stone-300 leading-snug mt-0.5">
+                        Fija 30 FPS exactos (34ms por cuadro) para evitar que Vyzer diga que tiene 59/60 FPS.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !smoothVyzerPreset;
+                      setSmoothVyzerPreset(next);
+                      if (next) {
+                        setSmoothTargetFps(30);
+                        setSmoothOutputFormat('webp');
+                        setSmoothInterpolate(false);
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      smoothVyzerPreset
+                        ? 'bg-emerald-500 text-black hover:bg-emerald-400 shadow-sm'
+                        : 'bg-[#1e2436] text-stone-300 hover:text-white border border-[#2e374f]'
+                    }`}
+                  >
+                    {smoothVyzerPreset ? '✓ Activado' : 'Activar'}
+                  </button>
+                </div>
+
+                {smoothVyzerPreset && (
+                  <div className="mt-3 pt-2.5 border-t border-emerald-500/20 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2 text-[10px] text-emerald-300 font-mono">
+                      <span className="bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">✓ Retraso: 34ms (29.4 FPS)</span>
+                      <span className="bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">✓ Formato: WebP Animado</span>
+                      <span className="bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">✓ Transparencia Alfa intacta</span>
+                    </div>
+                    <label className="flex items-center gap-2 text-xs text-stone-200 cursor-pointer pt-1">
+                      <input
+                        type="checkbox"
+                        checked={smoothVyzerResize}
+                        onChange={(e) => setSmoothVyzerResize(e.target.checked)}
+                        className="rounded border-[#262C3E] bg-[#181C2B] text-emerald-500 focus:ring-0"
+                      />
+                      <span>Auto-centrar en lienzo cuadrado de 1000 × 1000 px (estándar de Vyzer)</span>
+                    </label>
+                  </div>
+                )}
               </div>
 
               {/* 1. Mode Selector */}
@@ -4330,31 +4411,48 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs text-stone-200">
                   <span className="font-semibold">Tasa de Cuadros (FPS Objetivo):</span>
-                  <span className="font-mono text-cyan-400 font-bold">{smoothTargetFps} FPS</span>
+                  <span className="font-mono text-cyan-400 font-bold">
+                    {smoothTargetFps} FPS {smoothTargetFps === 30 && <span className="text-emerald-400 text-[10px] font-normal font-sans">(≤30 FPS Vyzer)</span>}
+                  </span>
                 </div>
                 <div className="grid grid-cols-5 gap-1.5">
                   {[
                     { fps: 15, label: '15 FPS', sub: 'Ligero' },
                     { fps: 24, label: '24 FPS', sub: 'Cine' },
-                    { fps: 30, label: '30 FPS', sub: 'Fluido' },
+                    { fps: 30, label: '30 FPS', sub: 'Vyzer/Discord' },
                     { fps: 50, label: '50 FPS', sub: 'Ultra' },
                     { fps: 60, label: '60 FPS', sub: 'Máximo' }
                   ].map((item) => (
                     <button
                       key={item.fps}
                       type="button"
-                      onClick={() => setSmoothTargetFps(item.fps)}
+                      onClick={() => {
+                        setSmoothTargetFps(item.fps);
+                        if (item.fps !== 30) {
+                          setSmoothVyzerPreset(false);
+                        }
+                      }}
                       className={`py-2 px-1 rounded-xl border text-center transition-all cursor-pointer ${
                         smoothTargetFps === item.fps
-                          ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white border-cyan-400 shadow-md font-bold'
+                          ? item.fps === 30
+                            ? 'bg-gradient-to-r from-emerald-600 to-cyan-600 text-white border-emerald-400 shadow-md font-bold'
+                            : 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white border-cyan-400 shadow-md font-bold'
                           : 'bg-[#181C2B] text-stone-300 border-[#262C3E] hover:text-white'
                       }`}
                     >
                       <div className="text-xs font-bold">{item.label}</div>
-                      <div className="text-[9px] opacity-80">{item.sub}</div>
+                      <div className="text-[9px] opacity-80 truncate">{item.sub}</div>
                     </button>
                   ))}
                 </div>
+                {smoothTargetFps === 30 && (
+                  <div className="p-2 rounded-lg bg-emerald-950/40 border border-emerald-500/30 flex items-start gap-2 mt-1.5">
+                    <span className="text-emerald-400 text-xs">✓</span>
+                    <p className="text-[10px] text-emerald-200/90 leading-tight">
+                      <strong>Calibrado a 34ms por cuadro (29.41 FPS):</strong> Cumple estrictamente con el límite de 30 FPS de Vyzer y Discord para que la plataforma nunca lo rechace por exceder 30 FPS o marcar 59/60 FPS.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* 3. Speed Multiplier */}
@@ -4463,22 +4561,37 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
               {/* 5. Output Format */}
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs text-stone-300">
-                  <span className="font-semibold">Formato de Salida Recomendado:</span>
-                  <span className="text-cyan-400 font-mono font-bold uppercase">{smoothOutputFormat}</span>
+                  <span className="font-semibold">Formato y Tasa de Salida:</span>
+                  <span className={`font-mono font-bold uppercase ${smoothVyzerPreset ? 'text-emerald-400' : 'text-cyan-400'}`}>
+                    {smoothVyzerPreset
+                      ? 'WEBP (≤ 30 FPS VYZER)'
+                      : `${smoothOutputFormat === 'auto' ? 'AUTO' : smoothOutputFormat.toUpperCase()} (${smoothTargetFps} FPS)`}
+                  </span>
                 </div>
                 <div className="grid grid-cols-3 gap-1.5">
                   {[
-                    { id: 'auto', label: 'Auto (Óptimo)' },
-                    { id: 'webp', label: 'WebP (60 FPS)' },
-                    { id: 'gif', label: 'GIF (Anti-Lag)' }
+                    {
+                      id: 'auto',
+                      label: smoothVyzerPreset ? 'Auto (WebP 30 FPS)' : `Auto (${smoothTargetFps} FPS)`
+                    },
+                    {
+                      id: 'webp',
+                      label: smoothVyzerPreset ? 'WebP (≤ 30 FPS Vyzer)' : `WebP (${smoothTargetFps} FPS)`
+                    },
+                    {
+                      id: 'gif',
+                      label: smoothVyzerPreset ? 'GIF (30 FPS Vyzer)' : `GIF (${smoothTargetFps} FPS)`
+                    }
                   ].map((fmt) => (
                     <button
                       key={fmt.id}
                       type="button"
                       onClick={() => setSmoothOutputFormat(fmt.id as any)}
-                      className={`py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                      className={`py-1.5 px-1 rounded-xl text-xs font-semibold border transition-all cursor-pointer text-center truncate ${
                         smoothOutputFormat === fmt.id
-                          ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white border-cyan-400 shadow-sm font-bold'
+                          ? smoothVyzerPreset
+                            ? 'bg-emerald-600 text-white border-emerald-400 shadow-sm font-bold'
+                            : 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white border-cyan-400 shadow-sm font-bold'
                           : 'bg-[#181C2B] text-stone-300 border-[#262C3E] hover:text-white'
                       }`}
                     >
@@ -4487,7 +4600,15 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
                   ))}
                 </div>
                 <p className="text-[10px] text-stone-400 pt-0.5">
-                  💡 <span className="text-cyan-300">Recomendación:</span> WebP Animado soporta 60 FPS reales y millones de colores sin las limitaciones ni el lag histórico del formato GIF.
+                  {smoothVyzerPreset ? (
+                    <span className="text-emerald-300 flex items-center gap-1">
+                      <span>✓</span> Formato configurado para exportar estrictamente a <strong>30 FPS (34ms por cuadro)</strong> en WebP Animado, 100% compatible con molduras de avatar de Discord y Vyzer.
+                    </span>
+                  ) : (
+                    <span>
+                      💡 <span className="text-cyan-300">Configuración actual:</span> Exportará en formato <strong>{smoothOutputFormat === 'auto' ? 'WebP' : smoothOutputFormat.toUpperCase()}</strong> a <strong>{smoothTargetFps} FPS</strong> reales ({smoothTargetFps === 30 ? '34ms' : `${Math.round(1000 / smoothTargetFps)}ms`} por cuadro).
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
@@ -4835,6 +4956,10 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
                         ? t('workspace.applyRecolor', 'Aplicar Cambio de Color')
                         : tool.id === 'analyzer-tools'
                         ? '🛡️ Limpiar Metadatos y Eliminar GPS (100% Seguro)'
+                        : tool.id === 'smooth-tools'
+                        ? smoothVyzerPreset
+                          ? 'Generar WebP Vyzer (≤ 30 FPS Estricto)'
+                          : `Aplicar Fluidez (${smoothTargetFps} FPS • ${smoothOutputFormat === 'auto' ? 'WebP' : smoothOutputFormat.toUpperCase()})`
                         : t('workspace.processFile', 'Procesar archivo')}
                     </span>
                   </div>
@@ -5253,10 +5378,16 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
 
                 {/* Smooth Tools HUD Badge */}
                 {tool.id === 'smooth-tools' && (
-                  <div className="absolute top-2 left-2 z-20 pointer-events-none flex items-center gap-1.5 bg-[#0B0F19]/90 border border-cyan-500/60 px-2.5 py-1 rounded-full shadow-lg backdrop-blur-sm">
-                    <Zap className="h-3 w-3 text-cyan-400 animate-pulse" />
-                    <span className="text-[10px] font-bold text-cyan-300">
-                      {smoothTargetFps} FPS • {smoothSpeedMultiplier}x Anti-Lag
+                  <div className={`absolute top-2 left-2 z-20 pointer-events-none flex items-center gap-1.5 bg-[#0B0F19]/90 border px-2.5 py-1 rounded-full shadow-lg backdrop-blur-sm ${
+                    smoothVyzerPreset ? 'border-emerald-500/70 text-emerald-300' : 'border-cyan-500/60 text-cyan-300'
+                  }`}>
+                    {smoothVyzerPreset ? (
+                      <Sparkles className="h-3 w-3 text-emerald-400 animate-pulse" />
+                    ) : (
+                      <Zap className="h-3 w-3 text-cyan-400 animate-pulse" />
+                    )}
+                    <span className="text-[10px] font-bold">
+                      {smoothVyzerPreset ? '30 FPS Vyzer • Anti-Lag (34ms)' : `${smoothTargetFps} FPS • ${smoothSpeedMultiplier}x Anti-Lag`}
                     </span>
                   </div>
                 )}
@@ -5428,30 +5559,58 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
 
               {tool.id === 'smooth-tools' && (
                 <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSmoothTargetFps(60);
-                      setSmoothMode('boost-fps');
-                      setTimeout(() => handleProcess(), 50);
-                    }}
-                    className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-500/40 text-cyan-300 text-xs font-bold transition-all cursor-pointer shadow"
-                  >
-                    <Zap className="h-3.5 w-3.5 text-cyan-400" />
-                    <span>Forzar Ultra 60 FPS</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSmoothSpeedMultiplier(1.5);
-                      setSmoothMode('speed-up');
-                      setTimeout(() => handleProcess(), 50);
-                    }}
-                    className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-500/40 text-cyan-300 text-xs font-bold transition-all cursor-pointer shadow"
-                  >
-                    <FastForward className="h-3.5 w-3.5 text-cyan-400" />
-                    <span>Acelerar a 1.5x</span>
-                  </button>
+                  {smoothVyzerPreset ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTimeout(() => handleProcess(), 50);
+                        }}
+                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-emerald-950/70 hover:bg-emerald-900/90 border border-emerald-500/50 text-emerald-300 text-xs font-bold transition-all cursor-pointer shadow"
+                      >
+                        <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+                        <span>Exportar Vyzer 30 FPS</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSmoothVyzerResize(!smoothVyzerResize);
+                        }}
+                        className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow ${
+                          smoothVyzerResize
+                            ? 'bg-emerald-900/60 text-emerald-200 border-emerald-400'
+                            : 'bg-[#181C2B] text-stone-300 border-[#2B3248] hover:text-white'
+                        }`}
+                      >
+                        <span>{smoothVyzerResize ? '1000x1000 px Activo ✓' : 'Fijar 1000x1000 px'}</span>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTimeout(() => handleProcess(), 50);
+                        }}
+                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-500/40 text-cyan-300 text-xs font-bold transition-all cursor-pointer shadow"
+                      >
+                        <Zap className="h-3.5 w-3.5 text-cyan-400" />
+                        <span>Procesar a {smoothTargetFps} FPS</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSmoothSpeedMultiplier(1.5);
+                          setSmoothMode('speed-up');
+                          setTimeout(() => handleProcess(), 50);
+                        }}
+                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-500/40 text-cyan-300 text-xs font-bold transition-all cursor-pointer shadow"
+                      >
+                        <FastForward className="h-3.5 w-3.5 text-cyan-400" />
+                        <span>Acelerar a 1.5x</span>
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
