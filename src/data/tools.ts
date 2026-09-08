@@ -274,17 +274,17 @@ export const TOOLS: ToolDefinition[] = [
   {
     id: 'batch-webp',
     name: 'Lote de Imágenes a WebP',
-    subtitle: 'Une 50+ imágenes en 1 solo archivo WebP animado o en ZIP.',
-    description: 'Convierte decenas o cientos de fotos e imágenes en un único archivo WebP animado ultra-optimizado o en un paquete .ZIP con compresión inteligente sin pérdida visual.',
+    subtitle: 'Une hasta 1000 imágenes en 1 solo archivo WebP animado o en ZIP.',
+    description: 'Convierte hasta 1000 fotos e imágenes en un único archivo WebP animado ultra-optimizado o en un paquete .ZIP con compresión inteligente sin pérdida visual.',
     category: 'webp',
     iconName: 'CopyCheck',
-    acceptedMime: 'image/*,.webp,.png,.jpg,.jpeg,.gif,.avif,.svg',
+    acceptedMime: '*/*',
     status: 'DISPONIBLE',
     isAvailable: true,
     accentHex: '#0EA5E9',
     gradient: 'from-sky-500 via-blue-600 to-indigo-600',
     iconBg: 'bg-sky-950/40 text-sky-400 border-sky-500/30',
-    subtools: ['50 fotos a 1 WebP animado', 'Lote de fotos a WebP ZIP', 'Ajuste de FPS', 'Sticker WhatsApp 512px']
+    subtools: ['Hasta 1000 fotos a WebP', 'Lote de fotos a WebP ZIP', 'Ajuste de FPS', 'Sticker WhatsApp 512px']
   },
   {
     id: 'svg-tools',

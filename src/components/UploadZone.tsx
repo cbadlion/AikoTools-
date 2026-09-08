@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowUp, Upload, Film, Image as ImageIcon, Sparkles, X, Layers, Music, Zap, FileText, CheckCircle2, ShieldCheck, Flame } from 'lucide-react';
+import { ArrowUp, Upload, Film, Image as ImageIcon, Sparkles, X, Layers, Music, Zap, FileText, CheckCircle2, ShieldCheck, Flame, FolderOpen } from 'lucide-react';
 import { ToolDefinition } from '../types';
 import { formatFileSize } from '../utils/mediaEngine';
 import { notifyUser } from '../utils/notifications';
@@ -21,6 +21,7 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, onFilesS
   const [uploadProgress, setUploadProgress] = useState(0);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const progressTimerRef = useRef<any>(null);
 
   const acceptedFormats = selectedTool ? selectedTool.acceptedMime : 'image/*,video/*,.gif,.webp';
@@ -159,6 +160,16 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, onFilesS
           className="hidden"
         />
 
+        <input
+          ref={folderInputRef}
+          id="folder-files-input"
+          type="file"
+          multiple
+          accept="*/*"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+
         {/* Inner Frame */}
         <div className="p-6 sm:p-8 flex flex-col items-center justify-center text-center">
           {isUploading && pendingFile ? (
@@ -256,7 +267,18 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, onFilesS
                   className="flex items-center justify-center gap-2 rounded-xl active:scale-95 px-6 py-3 text-sm font-bold text-white border border-white/20 transition-all min-h-[46px] tracking-wide cursor-pointer hover:brightness-110"
                 >
                   <Upload className="h-4 w-4 stroke-[2.5]" />
-                  <span>{t('upload.selectBtn', 'Elegir archivo desde tu dispositivo')}</span>
+                  <span>{t('upload.selectBtn', 'Elegir archivo')}</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="btn-select-folder-files"
+                  onClick={() => folderInputRef.current?.click()}
+                  className="flex items-center justify-center gap-2 rounded-xl active:scale-95 px-5 py-3 text-sm font-bold text-amber-300 bg-amber-950/40 hover:bg-amber-900/50 border border-amber-500/40 transition-all min-h-[46px] cursor-pointer shadow-xs hover:border-amber-400"
+                  title={t('upload.foldersBtnTitle', 'Abrir explorador de archivos para entrar a cualquier carpeta del dispositivo')}
+                >
+                  <FolderOpen className="h-4 w-4 text-amber-400" />
+                  <span>{t('upload.foldersBtn', 'Carpetas del dispositivo')}</span>
                 </button>
 
                 <div className="hidden sm:flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-[#141720] border border-[#242938] text-xs font-mono text-stone-300">

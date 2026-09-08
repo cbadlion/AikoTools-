@@ -25,7 +25,18 @@ import {
   Flame,
   FileImage,
   FolderDown,
-  X
+  FolderOpen,
+  FolderArchive,
+  Image as ImageIcon,
+  X,
+  CheckSquare,
+  Square,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Check
 } from 'lucide-react';
 import {
   BatchImageItem,
@@ -34,12 +45,15 @@ import {
   MuxResult,
   loadImageElement
 } from '../utils/animatedWebpMuxer';
-import { formatFileSize } from '../utils/mediaEngine';
+import { formatFileSize, extractMediaFrames } from '../utils/mediaEngine';
 import { saveToHistory } from '../utils/historyStorage';
 import { notifyUser } from '../utils/notifications';
 import { useLanguage } from '../context/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
 import { generateSampleBatchImages } from '../utils/sampleMedia';
+
+const MAX_BATCH_ITEMS = 1000;
+const DEFAULT_PAGE_SIZE = 48;
 
 interface BatchWebPWorkspaceProps {
   initialFiles?: File[];
@@ -60,7 +74,12 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
 
   // Images list
   const [items, setItems] = useState<BatchImageItem[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedPreviewIndex, setSelectedPreviewIndex] = useState<number>(0);
+
+  // Pagination for high performance (supporting up to 1000 items smoothly)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
 
   // Settings for Animated WebP
   const [fps, setFps] = useState<number>(10);
@@ -87,7 +106,10 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
 
   // Animated WebP preview state
   const [isPlaying, setIsPlaying] = useState(true);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderFilesInputRef = useRef<HTMLInputElement>(null);
+  const directoryInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const mediaExtractInputRef = useRef<HTMLInputElement>(null);
 
   // Sync delayMs with fps (guarantees safe 34ms for 30 FPS to satisfy Vyzer & Discord strict <=30 FPS limits)
   const handleFpsChange = (newFps: number) => {
@@ -100,18 +122,154 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
     setFps(Math.max(1, Math.min(60, Math.round(1000 / newDelay))));
   };
 
+  // Modern Directory Picker with native fallback
+  const handleOpenDirectoryPicker = async () => {
+    if ('showDirectoryPicker' in window) {
+      try {
+        const dirHandle = await (window as any).showDirectoryPicker();
+        const files: File[] = [];
+        for await (const entry of dirHandle.values()) {
+          if (entry.kind === 'file') {
+            const file = await entry.getFile();
+            if (
+              file.type.startsWith('image/') ||
+              file.name.match(/\.(png|jpe?g|webp|gif|bmp|svg|avif|heic|heif|ico|tiff?)$/i)
+            ) {
+              files.push(file);
+            }
+          }
+        }
+        if (files.length > 0) {
+          addFilesToBatch(files);
+        } else {
+          notifyUser({
+            title: t('batch.noImagesInFolder', 'Sin imágenes compatibles'),
+            body: t('batch.noImagesInFolderDesc', 'No se encontraron imágenes en la carpeta seleccionada.'),
+            type: 'warning'
+          });
+        }
+        return;
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
+        console.warn('Directory picker fallback:', err);
+      }
+    }
+    directoryInputRef.current?.click();
+  };
+
+  // Universal Drop Handler supporting directories and files
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    const dtItems = e.dataTransfer.items;
+    if (!dtItems || dtItems.length === 0) {
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        addFilesToBatch(Array.from(e.dataTransfer.files));
+      }
+      return;
+    }
+
+    const files: File[] = [];
+    const traverseEntry = async (entry: any) => {
+      if (entry.isFile) {
+        const file: File = await new Promise((resolve) => entry.file(resolve));
+        files.push(file);
+      } else if (entry.isDirectory) {
+        const dirReader = entry.createReader();
+        const readAllEntries = async (): Promise<any[]> => {
+          let all: any[] = [];
+          let batch: any[] = await new Promise((res) => dirReader.readEntries(res));
+          while (batch.length > 0) {
+            all = all.concat(batch);
+            batch = await new Promise((res) => dirReader.readEntries(res));
+          }
+          return all;
+        };
+        const subEntries = await readAllEntries();
+        for (const sub of subEntries) {
+          await traverseEntry(sub);
+        }
+      }
+    };
+
+    const promises: Promise<void>[] = [];
+    for (let i = 0; i < dtItems.length; i++) {
+      const item = dtItems[i];
+      const entry = (item as any).webkitGetAsEntry ? (item as any).webkitGetAsEntry() : null;
+      if (entry) {
+        promises.push(traverseEntry(entry));
+      } else {
+        const file = item.getAsFile();
+        if (file) files.push(file);
+      }
+    }
+
+    if (promises.length > 0) {
+      await Promise.all(promises);
+      if (files.length > 0) {
+        addFilesToBatch(files);
+        return;
+      }
+    }
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      addFilesToBatch(Array.from(e.dataTransfer.files));
+    }
+  };
+
   // Convert File objects to BatchImageItems with dimensions
   const addFilesToBatch = async (files: File[]) => {
-    const validFiles = files.filter((f) => f.type.startsWith('image/') || f.name.match(/\.(png|jpe?g|webp|gif|bmp|svg|avif)$/i));
-    if (validFiles.length === 0) return;
+    const validFiles = files.filter(
+      (f) =>
+        f.type.startsWith('image/') ||
+        f.name.match(/\.(png|jpe?g|webp|gif|bmp|svg|avif|heic|heif|ico|tiff?)$/i)
+    );
+    if (validFiles.length === 0) {
+      if (files.length > 0) {
+        notifyUser({
+          title: t('batch.noValidImagesTitle', 'Archivos no compatibles'),
+          body: t(
+            'batch.noValidImagesDesc',
+            'Por favor selecciona imágenes (JPG, PNG, WebP, GIF, AVIF, SVG).'
+          ),
+          type: 'warning'
+        });
+      }
+      return;
+    }
+
+    const currentCount = items.length;
+    const remainingSlots = MAX_BATCH_ITEMS - currentCount;
+
+    if (remainingSlots <= 0) {
+      notifyUser({
+        title: t('batch.maxLimitReached', 'Límite máximo de 1000 fotogramas alcanzado'),
+        body: t('batch.limitNoticeDesc', 'No se pueden añadir más de 1000 imágenes a la vez.'),
+        type: 'warning'
+      });
+      return;
+    }
+
+    const filesToAdd = validFiles.slice(0, remainingSlots);
+    if (validFiles.length > remainingSlots) {
+      notifyUser({
+        title: t('batch.limitReachedNotice', `Se añadieron ${remainingSlots} archivos`),
+        body: t('batch.limitReachedBody', `Se alcanzó el límite máximo de 1000 fotogramas por lote.`),
+        type: 'warning'
+      });
+    }
 
     const newItems: BatchImageItem[] = [];
-    for (const file of validFiles) {
+    const newSelectedIds = new Set(selectedIds);
+
+    for (const file of filesToAdd) {
       const previewUrl = URL.createObjectURL(file);
+      const itemId = `${file.name}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      newSelectedIds.add(itemId);
+
       try {
         const img = await loadImageElement(file);
         newItems.push({
-          id: `${file.name}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          id: itemId,
           file,
           name: file.name,
           size: file.size,
@@ -121,7 +279,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
         });
       } catch {
         newItems.push({
-          id: `${file.name}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          id: itemId,
           file,
           name: file.name,
           size: file.size,
@@ -131,6 +289,81 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
     }
 
     setItems((prev) => [...prev, ...newItems]);
+    setSelectedIds(newSelectedIds);
+  };
+
+  // Extract individual frames from an animated file (GIF, WebP animado, or video)
+  const handleExtractFramesFromFile = async (file: File) => {
+    setIsProcessing(true);
+    setProgress(5);
+    setStatusText(t('batch.extractingProgress', 'Extrayendo fotogramas del archivo multimedia...'));
+
+    try {
+      const result = await extractMediaFrames(file, (p) => {
+        setProgress(p);
+        setStatusText(`${t('batch.extractingProgress', 'Extrayendo fotogramas...')} ${p}%`);
+      });
+
+      if (!result.frames || result.frames.length === 0) {
+        throw new Error(t('batch.extractNoFrames', 'No se pudieron extraer fotogramas de este archivo.'));
+      }
+
+      const remainingSlots = MAX_BATCH_ITEMS - items.length;
+      if (remainingSlots <= 0) {
+        notifyUser({
+          title: t('batch.maxLimitReached', 'Límite máximo alcanzado'),
+          body: t('batch.limitNoticeDesc', 'Ya tienes 1000 fotogramas en el lote.'),
+          type: 'warning'
+        });
+        return;
+      }
+
+      const framesToTake = result.frames.slice(0, remainingSlots);
+      const baseName = file.name.replace(/\.[^/.]+$/, '');
+      const newItems: BatchImageItem[] = [];
+      const newSelectedIds = new Set(selectedIds);
+
+      for (let i = 0; i < framesToTake.length; i++) {
+        const frame = framesToTake[i];
+        const blob = await new Promise<Blob | null>((resolve) => frame.canvas.toBlob(resolve, 'image/png'));
+        if (blob) {
+          const frameName = `${baseName}_frame_${String(i + 1).padStart(3, '0')}.png`;
+          const frameFile = new File([blob], frameName, { type: 'image/png' });
+          const previewUrl = URL.createObjectURL(frameFile);
+          const itemId = `extracted-${baseName}-${i}-${Date.now()}`;
+          newSelectedIds.add(itemId);
+
+          newItems.push({
+            id: itemId,
+            file: frameFile,
+            name: frameName,
+            size: blob.size,
+            previewUrl,
+            width: frame.canvas.width,
+            height: frame.canvas.height
+          });
+        }
+      }
+
+      setItems((prev) => [...prev, ...newItems]);
+      setSelectedIds(newSelectedIds);
+
+      notifyUser({
+        title: `✨ ${newItems.length} ${t('batch.framesExtractedTitle', 'fotogramas extraídos')}`,
+        body: t('batch.framesExtractedBody', 'Fotogramas listos para ordenar, filtrar y compilar.'),
+        type: 'success'
+      });
+    } catch (err: any) {
+      console.error('Error al extraer fotogramas:', err);
+      notifyUser({
+        title: t('batch.extractError', 'Error al extraer fotogramas'),
+        body: err?.message || t('batch.extractErrorDesc', 'El archivo no contiene fotogramas válidos.'),
+        type: 'warning'
+      });
+    } finally {
+      setIsProcessing(false);
+      setStatusText('');
+    }
   };
 
   // Load initial files on mount
@@ -149,21 +382,30 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
     };
   }, []);
 
-  // Total original batch size
-  const totalOriginalSize = useMemo(() => {
-    return items.reduce((acc, it) => acc + it.size, 0);
-  }, [items]);
+  // Selected items helper
+  const selectedItems = useMemo(() => {
+    return items.filter((it) => selectedIds.has(it.id));
+  }, [items, selectedIds]);
 
-  // Max natural width and height among items
+  const itemsToProcess = useMemo(() => {
+    return selectedItems.length > 0 ? selectedItems : items;
+  }, [selectedItems, items]);
+
+  // Total original batch size of selected items
+  const totalOriginalSize = useMemo(() => {
+    return itemsToProcess.reduce((acc, it) => acc + it.size, 0);
+  }, [itemsToProcess]);
+
+  // Max natural width and height among selected items
   const maxNaturalDimensions = useMemo(() => {
     let w = 800;
     let h = 800;
-    for (const it of items) {
+    for (const it of itemsToProcess) {
       if (it.width && it.width > w) w = it.width;
       if (it.height && it.height > h) h = it.height;
     }
     return { width: w, height: h };
-  }, [items]);
+  }, [itemsToProcess]);
 
   // Calculate target output dimensions based on preset
   const targetOutputDimensions = useMemo(() => {
@@ -191,6 +433,72 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
     return maxNaturalDimensions;
   }, [dimensionPreset, maxNaturalDimensions]);
 
+  // Frame selection helpers
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedIds(new Set(items.map((it) => it.id)));
+  };
+
+  const deselectAll = () => {
+    setSelectedIds(new Set());
+  };
+
+  const invertSelection = () => {
+    setSelectedIds((prev) => {
+      const next = new Set<string>();
+      for (const it of items) {
+        if (!prev.has(it.id)) next.add(it.id);
+      }
+      return next;
+    });
+  };
+
+  const selectEven = () => {
+    const next = new Set<string>();
+    items.forEach((it, idx) => {
+      if ((idx + 1) % 2 === 0) next.add(it.id);
+    });
+    setSelectedIds(next);
+  };
+
+  const selectOdd = () => {
+    const next = new Set<string>();
+    items.forEach((it, idx) => {
+      if ((idx + 1) % 2 !== 0) next.add(it.id);
+    });
+    setSelectedIds(next);
+  };
+
+  const keepOnlySelected = () => {
+    const unselected = items.filter((it) => !selectedIds.has(it.id));
+    unselected.forEach((it) => URL.revokeObjectURL(it.previewUrl));
+    const kept = items.filter((it) => selectedIds.has(it.id));
+    setItems(kept);
+    setCurrentPage(1);
+    setSelectedPreviewIndex(0);
+  };
+
+  const deleteSelected = () => {
+    const toDelete = items.filter((it) => selectedIds.has(it.id));
+    toDelete.forEach((it) => URL.revokeObjectURL(it.previewUrl));
+    const remaining = items.filter((it) => !selectedIds.has(it.id));
+    setItems(remaining);
+    setSelectedIds(new Set(remaining.map((it) => it.id)));
+    setCurrentPage(1);
+    setSelectedPreviewIndex(0);
+  };
+
   // Reorder items
   const moveItem = (index: number, direction: 'up' | 'down') => {
     if (direction === 'up' && index === 0) return;
@@ -207,6 +515,11 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
     const it = items[index];
     URL.revokeObjectURL(it.previewUrl);
     setItems(items.filter((_, i) => i !== index));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(it.id);
+      return next;
+    });
     if (selectedPreviewIndex >= items.length - 1) {
       setSelectedPreviewIndex(Math.max(0, items.length - 2));
     }
@@ -228,20 +541,22 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
   const handleClearAll = () => {
     items.forEach((it) => URL.revokeObjectURL(it.previewUrl));
     setItems([]);
+    setSelectedIds(new Set());
     setAnimatedResult(null);
     setZipResult(null);
+    setCurrentPage(1);
   };
 
   // Load sample demo frames
   const handleLoadDemo = async (count = 12) => {
     setIsProcessing(true);
-    setStatusText(`Generando ${count} fotogramas demo...`);
+    setStatusText(`${t('batch.generatingDemo', 'Generando')} ${count} ${t('batch.demoFrames', 'fotogramas demo...')}`);
     try {
       const demoFiles = await generateSampleBatchImages(count);
       await addFilesToBatch(demoFiles);
       notifyUser({
-        title: `✨ ${count} imágenes de muestra cargadas`,
-        body: 'Listas para convertir en un archivo WebP animado o archivo ZIP.',
+        title: `✨ ${count} ${t('batch.demoLoadedTitle', 'imágenes de muestra cargadas')}`,
+        body: t('batch.demoLoadedBody', 'Listas para convertir en un archivo WebP animado o archivo ZIP.'),
         type: 'success'
       });
     } catch (e: any) {
@@ -252,15 +567,17 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
     }
   };
 
-  // EXECUTE: Convert all images to a SINGLE animated .webp file
+  // EXECUTE: Convert all chosen images to a SINGLE animated .webp file
   const handleCreateAnimatedWebP = async () => {
-    if (items.length === 0) return;
+    const framesToEncode = selectedItems.length > 0 ? selectedItems : items;
+    if (framesToEncode.length === 0) return;
+
     setIsProcessing(true);
     setProgress(5);
-    setStatusText(`Iniciando conversión de ${items.length} imágenes...`);
+    setStatusText(`${t('batch.startingConversion', 'Iniciando conversión de')} ${framesToEncode.length} ${t('batch.images', 'fotogramas...')}`);
 
     try {
-      const files = items.map((it) => it.file);
+      const files = framesToEncode.map((it) => it.file);
       const res = await createAnimatedWebPFromImages(files, {
         width: targetOutputDimensions.width,
         height: targetOutputDimensions.height,
@@ -271,7 +588,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
         fit,
         onProgress: (p, cur, tot) => {
           setProgress(p);
-          setStatusText(`Codificando fotograma ${cur} de ${tot} (${p}%)...`);
+          setStatusText(`${t('batch.encodingFrame', 'Codificando fotograma')} ${cur} ${t('batch.of', 'de')} ${tot} (${p}%)...`);
         }
       });
 
@@ -283,7 +600,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
         {
           blob: res.blob,
           url: res.url,
-          fileName: `animacion_${items.length}_fotos.webp`,
+          fileName: `animacion_${framesToEncode.length}_fotos.webp`,
           originalSize: totalOriginalSize,
           newSize: res.totalSize,
           width: res.width,
@@ -291,19 +608,19 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
           format: 'webp',
           timeTakenMs: 120
         },
-        'Lote a WebP (Animado)'
+        t('batch.historyTitle', 'Lote a WebP (Animado)')
       );
 
       notifyUser({
-        title: `✅ Archivo WebP generado (${formatFileSize(res.totalSize)})`,
-        body: `${items.length} imágenes unidas en 1 solo archivo .webp a ${fps} FPS.`,
+        title: `✅ ${t('batch.successTitle', 'Archivo WebP generado')} (${formatFileSize(res.totalSize)})`,
+        body: `${framesToEncode.length} ${t('batch.successBody', 'imágenes unidas en 1 solo archivo .webp a')} ${fps} FPS.`,
         type: 'success'
       });
     } catch (err: any) {
       console.error('Error al generar WebP animado:', err);
       notifyUser({
-        title: 'Error al convertir a WebP',
-        body: err?.message || 'Ocurrió un fallo durante la codificación.',
+        title: t('batch.errorTitle', 'Error al convertir a WebP'),
+        body: err?.message || t('batch.errorDesc', 'Ocurrió un fallo durante la codificación.'),
         type: 'warning'
       });
     } finally {
@@ -312,21 +629,23 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
     }
   };
 
-  // EXECUTE: Convert all images to individual .webp files packed in a .zip file
+  // EXECUTE: Convert chosen images to individual .webp files packed in a .zip file
   const handleCreateZipArchive = async () => {
-    if (items.length === 0) return;
+    const framesToEncode = selectedItems.length > 0 ? selectedItems : items;
+    if (framesToEncode.length === 0) return;
+
     setIsProcessing(true);
     setProgress(5);
-    setStatusText(`Preparando lote de ${items.length} imágenes a WebP...`);
+    setStatusText(`${t('batch.preparingZip', 'Preparando lote de')} ${framesToEncode.length} ${t('batch.imagesToWebp', 'imágenes a WebP...')}`);
 
     try {
       const res = await batchConvertToWebpZip(
-        items.map((it) => ({ file: it.file, name: it.name })),
+        framesToEncode.map((it) => ({ file: it.file, name: it.name })),
         {
           quality: quality / 100,
           onProgress: (p, cur, tot) => {
             setProgress(p);
-            setStatusText(`Convirtiendo imagen ${cur} de ${tot} a WebP (${p}%)...`);
+            setStatusText(`${t('batch.convertingImage', 'Convirtiendo imagen')} ${cur} ${t('batch.of', 'de')} ${tot} (${p}%)...`);
           }
         }
       );
@@ -337,25 +656,25 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
         {
           blob: res.zipBlob,
           url: res.zipUrl,
-          fileName: `lote_webp_${items.length}_imagenes.zip`,
+          fileName: `lote_webp_${framesToEncode.length}_imagenes.zip`,
           originalSize: res.totalOriginalSize,
           newSize: res.totalWebpSize,
           format: 'zip',
           timeTakenMs: 150
         },
-        'Lote a WebP (.zip)'
+        t('batch.historyZipTitle', 'Lote a WebP (.zip)')
       );
 
       notifyUser({
-        title: `✅ Lote completado (${formatFileSize(res.totalWebpSize)})`,
-        body: `${items.length} archivos WebP empaquetados en 1 archivo .zip.`,
+        title: `✅ ${t('batch.zipCompletedTitle', 'Lote completado')} (${formatFileSize(res.totalWebpSize)})`,
+        body: `${framesToEncode.length} ${t('batch.zipCompletedBody', 'archivos WebP empaquetados en 1 archivo .zip.')}`,
         type: 'success'
       });
     } catch (err: any) {
       console.error('Error en conversión por lotes ZIP:', err);
       notifyUser({
-        title: 'Error en conversión ZIP',
-        body: err?.message || 'Fallo durante el empaquetado.',
+        title: t('batch.zipErrorTitle', 'Error en conversión ZIP'),
+        body: err?.message || t('batch.zipErrorDesc', 'Fallo durante el empaquetado.'),
         type: 'warning'
       });
     } finally {
@@ -369,7 +688,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
     if (!animatedResult) return;
     const a = document.createElement('a');
     a.href = animatedResult.url;
-    a.download = `aiko_animacion_${items.length}_frames.webp`;
+    a.download = `aiko_animacion_${itemsToProcess.length}_frames.webp`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -380,24 +699,77 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
     if (!zipResult) return;
     const a = document.createElement('a');
     a.href = zipResult.zipUrl;
-    a.download = `aiko_lote_${items.length}_webp.zip`;
+    a.download = `aiko_lote_${itemsToProcess.length}_webp.zip`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
   };
 
+  // Pagination slice
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const paginatedItems = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return items.slice(start, start + pageSize);
+  }, [items, currentPage, pageSize]);
+
   return (
-    <div className="w-full bg-[#11131B] border border-[#222736] rounded-2xl p-4 sm:p-6 space-y-6 shadow-2xl">
-      {/* Hidden Multi-file input */}
+    <div className="w-full bg-[#11131B] border border-[#222736] rounded-2xl p-4 sm:p-6 space-y-6 shadow-2xl font-['Outfit']">
+      {/* 1. Device Folders & Files Picker (accept all files to open Android Documents/Files manager) */}
       <input
-        ref={fileInputRef}
+        ref={folderFilesInputRef}
         type="file"
         multiple
-        accept="image/*,.webp,.png,.jpg,.jpeg,.gif,.avif,.svg"
+        accept="*/*"
         className="hidden"
         onChange={(e) => {
           if (e.target.files && e.target.files.length > 0) {
             addFilesToBatch(Array.from(e.target.files));
+            e.target.value = '';
+          }
+        }}
+      />
+
+      {/* 2. Entire Directory / Folder Picker */}
+      <input
+        ref={directoryInputRef}
+        type="file"
+        multiple
+        // @ts-ignore
+        webkitdirectory=""
+        directory=""
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            addFilesToBatch(Array.from(e.target.files));
+            e.target.value = '';
+          }
+        }}
+      />
+
+      {/* 3. Traditional Gallery Photo Picker */}
+      <input
+        ref={galleryInputRef}
+        type="file"
+        multiple
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            addFilesToBatch(Array.from(e.target.files));
+            e.target.value = '';
+          }
+        }}
+      />
+
+      {/* 4. File input for extracting frames from animated media */}
+      <input
+        ref={mediaExtractInputRef}
+        type="file"
+        accept="*/*"
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files && e.target.files[0]) {
+            handleExtractFramesFromFile(e.target.files[0]);
             e.target.value = '';
           }
         }}
@@ -414,17 +786,20 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
               <Layers className="h-5 w-5" style={{ color: theme.primary }} />
             </div>
             <h2 className="text-lg sm:text-xl font-black text-white font-['Syne']">
-              Lote de Imágenes a <span style={{ color: theme.primary }}>WebP</span>
+              {t('tool.batch-webp.name', 'Lote de Imágenes a WebP')}
             </h2>
             <span
               style={{ backgroundColor: `${theme.primary}15`, color: theme.primary, borderColor: `${theme.primary}40` }}
               className="px-2 py-0.5 rounded-md border text-[10px] font-mono font-bold"
             >
-              PRO ENGINE
+              {t('batch.proEngine', 'PRO ENGINE • HASTA 1000 FOTOS')}
             </span>
           </div>
           <p className="text-xs text-stone-400">
-            Convierte 10, 50 o 100+ imágenes en un único archivo WebP animado o expórtalas en un archivo .ZIP optimizado.
+            {t(
+              'batch.subtitle',
+              'Elige o extrae fotogramas desde archivos y une hasta 1000 imágenes en 1 solo archivo WebP animado o en ZIP.'
+            )}
           </p>
         </div>
 
@@ -440,7 +815,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
             }`}
           >
             <Film className="h-3.5 w-3.5" />
-            <span>1 Archivo WebP Animado (.webp)</span>
+            <span>{t('batch.animatedMode', '1 Archivo WebP Animado (.webp)')}</span>
           </button>
 
           <button
@@ -453,7 +828,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
             }`}
           >
             <FileArchive className="h-3.5 w-3.5" />
-            <span>Paquete de WebP (.zip)</span>
+            <span>{t('batch.zipMode', 'Paquete de WebP (.zip)')}</span>
           </button>
         </div>
       </div>
@@ -462,27 +837,63 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* LEFT COLUMN: Image Management & List (7 cols) */}
         <div className="lg:col-span-7 space-y-4">
-          {/* Action Bar: Count, Add More, Reorder, Demo, Clear */}
+          {/* Action Bar: Count, Add More, Choose Frames, Extract, Demo, Clear */}
           <div className="flex flex-wrap items-center justify-between gap-2.5 bg-[#090A0F] border border-[#1E2333] p-3 rounded-xl">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-white font-mono">
-                {items.length} {items.length === 1 ? 'imagen' : 'imágenes'}
+                {items.length} / {MAX_BATCH_ITEMS}{' '}
+                {items.length === 1 ? t('batch.imageCountSingle', 'imagen') : t('batch.imagesCount', 'imágenes')}
               </span>
               {items.length > 0 && (
-                <span className="text-[11px] text-stone-400 font-mono">
-                  ({formatFileSize(totalOriginalSize)})
+                <span className="text-[11px] text-emerald-400 font-mono font-semibold">
+                  ({selectedItems.length} {t('batch.selectedFramesLabel', 'elegidas')})
                 </span>
               )}
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5">
+              {/* Button: Entrar a carpetas del dispositivo (Abre explorador de archivos completo) */}
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#181D2C] hover:bg-[#22293E] border border-[#2B334D] text-xs font-bold text-white transition-all cursor-pointer shadow-xs"
+                onClick={() => folderFilesInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-950/40 hover:bg-amber-900/50 border border-amber-500/40 text-xs font-bold text-amber-300 hover:text-white transition-all cursor-pointer shadow-xs"
+                title={t('batch.chooseFoldersTitle', 'Abre el explorador de archivos para entrar a Descargas, almacenamiento interno y carpetas del dispositivo')}
               >
-                <Plus className="h-3.5 w-3.5 text-sky-400" />
-                <span>Añadir fotos</span>
+                <FolderOpen className="h-3.5 w-3.5 text-amber-400" />
+                <span>{t('batch.chooseFolders', 'Carpetas del dispositivo')}</span>
+              </button>
+
+              {/* Button: Carpeta completa */}
+              <button
+                type="button"
+                onClick={handleOpenDirectoryPicker}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-sky-950/40 hover:bg-sky-900/50 border border-sky-500/40 text-xs font-bold text-sky-300 hover:text-white transition-all cursor-pointer shadow-xs"
+                title={t('batch.chooseDirectoryTitle', 'Carga todos los fotogramas de una carpeta seleccionada')}
+              >
+                <FolderArchive className="h-3.5 w-3.5 text-sky-400" />
+                <span className="hidden sm:inline">{t('batch.chooseDirectory', 'Carpeta')}</span>
+              </button>
+
+              {/* Button: Galería de fotos */}
+              <button
+                type="button"
+                onClick={() => galleryInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#181D2C] hover:bg-[#22293E] border border-[#2B334D] text-xs font-bold text-stone-300 hover:text-white transition-all cursor-pointer shadow-xs"
+                title={t('batch.chooseGalleryTitle', 'Abrir la galería de fotos del dispositivo')}
+              >
+                <ImageIcon className="h-3.5 w-3.5 text-rose-400" />
+                <span className="hidden sm:inline">{t('batch.chooseGallery', 'Galería')}</span>
+              </button>
+
+              {/* Button: Extraer fotogramas de GIF/WebP */}
+              <button
+                type="button"
+                onClick={() => mediaExtractInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/40 text-xs font-bold text-emerald-300 transition-all cursor-pointer"
+                title={t('batch.extractFramesTitle', 'Extrae todos los fotogramas individuales de un GIF, WebP animado o video')}
+              >
+                <Film className="h-3.5 w-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">{t('batch.extractFrames', 'Extraer fotogramas')}</span>
               </button>
 
               {items.length > 1 && (
@@ -490,7 +901,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                   <button
                     type="button"
                     onClick={() => sortItemsByName(true)}
-                    title="Ordenar por nombre A-Z"
+                    title={t('batch.sortAZTitle', 'Ordenar por nombre A-Z')}
                     className="p-1.5 rounded-lg bg-[#141722] hover:bg-[#1E2333] border border-[#242A3D] text-stone-300 hover:text-white text-xs transition-colors cursor-pointer"
                   >
                     A-Z
@@ -498,7 +909,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                   <button
                     type="button"
                     onClick={reverseOrder}
-                    title="Invertir orden de fotogramas"
+                    title={t('batch.reverseOrderTitle', 'Invertir orden de fotogramas')}
                     className="p-1.5 rounded-lg bg-[#141722] hover:bg-[#1E2333] border border-[#242A3D] text-stone-300 hover:text-white transition-colors cursor-pointer"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
@@ -513,7 +924,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-950/40 hover:bg-amber-900/50 border border-amber-500/40 text-xs font-bold text-amber-300 transition-all cursor-pointer"
                 >
                   <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                  <span>Demo 12 fotos</span>
+                  <span>{t('batch.demoBtn', 'Demo 12 fotos')}</span>
                 </button>
               )}
 
@@ -522,7 +933,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                   type="button"
                   onClick={handleClearAll}
                   className="p-1.5 rounded-lg bg-red-950/30 hover:bg-red-900/40 border border-red-500/30 text-red-400 text-xs transition-colors cursor-pointer"
-                  title="Eliminar todas las imágenes"
+                  title={t('batch.clearAllTitle', 'Eliminar todas las imágenes')}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -530,154 +941,412 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
             </div>
           </div>
 
-          {/* Empty Upload State or Images List */}
-          {items.length === 0 ? (
-            <div
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                  addFilesToBatch(Array.from(e.dataTransfer.files));
-                }
-              }}
-              onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-[#262D42] hover:border-red-500/60 rounded-2xl p-8 sm:p-12 text-center bg-[#0C0E15] hover:bg-[#10131D] transition-all cursor-pointer space-y-4"
-            >
-              <div className="h-16 w-16 mx-auto rounded-2xl bg-gradient-to-tr from-sky-950 to-[#141A29] border border-sky-500/30 flex items-center justify-center text-sky-400 shadow-xl">
-                <Upload className="h-8 w-8 animate-bounce" />
+          {/* Selection Filter Bar (Select All / None / Invert / Evens / Odds / Keep Selected) */}
+          {items.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-[#0C0E16] border border-[#1E2333] text-xs">
+              <div className="flex items-center gap-1 text-stone-300 font-semibold">
+                <Filter className="h-3.5 w-3.5 text-sky-400" />
+                <span>{t('batch.filterFrames', 'Elegir:')}</span>
               </div>
 
-              <div className="space-y-1">
-                <h3 className="text-base sm:text-lg font-bold text-white">
-                  Arrastra y suelta tus imágenes aquí (hasta 50 o más)
-                </h3>
-                <p className="text-xs text-stone-400 max-w-md mx-auto">
-                  Selecciona múltiples fotos, fotogramas de video, secuencias de animación o capturas. Soporta JPG, PNG, WebP, AVIF, GIF y SVG.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
-                  className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-lg transition-all"
+                  onClick={selectAll}
+                  className="px-2 py-1 rounded bg-[#161B29] hover:bg-[#20273A] text-stone-300 hover:text-white border border-[#263047] font-mono cursor-pointer"
                 >
-                  Seleccionar archivos en lote
+                  {t('batch.selectAll', 'Todos')} ({items.length})
                 </button>
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleLoadDemo(12);
-                  }}
-                  className="px-4 py-2.5 rounded-xl bg-[#181D2C] hover:bg-[#232B40] text-amber-300 border border-amber-500/30 text-xs font-bold transition-all flex items-center gap-1.5"
+                  onClick={deselectAll}
+                  className="px-2 py-1 rounded bg-[#161B29] hover:bg-[#20273A] text-stone-300 hover:text-white border border-[#263047] font-mono cursor-pointer"
                 >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  <span>Probar con 12 imágenes demo</span>
+                  {t('batch.deselectAll', 'Ninguno')}
+                </button>
+                <button
+                  type="button"
+                  onClick={invertSelection}
+                  className="px-2 py-1 rounded bg-[#161B29] hover:bg-[#20273A] text-stone-300 hover:text-white border border-[#263047] font-mono cursor-pointer"
+                >
+                  {t('batch.invertSelection', 'Invertir')}
+                </button>
+                <button
+                  type="button"
+                  onClick={selectEven}
+                  title={t('batch.evenTitle', 'Selecciona fotogramas pares (2, 4, 6...) para reducir velocidad a la mitad')}
+                  className="px-2 py-1 rounded bg-[#161B29] hover:bg-[#20273A] text-stone-300 hover:text-white border border-[#263047] font-mono cursor-pointer"
+                >
+                  {t('batch.evenFrames', 'Pares')}
+                </button>
+                <button
+                  type="button"
+                  onClick={selectOdd}
+                  title={t('batch.oddTitle', 'Selecciona fotogramas impares (1, 3, 5...)')}
+                  className="px-2 py-1 rounded bg-[#161B29] hover:bg-[#20273A] text-stone-300 hover:text-white border border-[#263047] font-mono cursor-pointer"
+                >
+                  {t('batch.oddFrames', 'Impares')}
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                {selectedItems.length > 0 && selectedItems.length < items.length && (
+                  <button
+                    type="button"
+                    onClick={keepOnlySelected}
+                    className="px-2 py-1 rounded bg-sky-950/40 hover:bg-sky-900/50 text-sky-300 border border-sky-500/40 font-semibold cursor-pointer"
+                    title={t('batch.keepSelectedTitle', 'Eliminar los no elegidos y conservar únicamente los seleccionados')}
+                  >
+                    {t('batch.keepSelected', 'Conservar elegidos')}
+                  </button>
+                )}
+                {selectedItems.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={deleteSelected}
+                    className="px-2 py-1 rounded bg-red-950/40 hover:bg-red-900/50 text-red-300 border border-red-500/40 font-semibold cursor-pointer"
+                    title={t('batch.deleteSelectedTitle', 'Eliminar del lote los fotogramas seleccionados')}
+                  >
+                    {t('batch.removeSelected', 'Eliminar')} ({selectedItems.length})
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Empty Upload State: Clear selection methods for folders, directory, gallery, media */}
+          {items.length === 0 ? (
+            <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+              className="border-2 border-dashed border-[#262D42] rounded-2xl p-5 sm:p-8 text-center bg-[#0C0E15] transition-all space-y-6"
+            >
+              <div className="h-14 w-14 mx-auto rounded-2xl bg-gradient-to-tr from-amber-950/70 to-[#141A29] border border-amber-500/40 flex items-center justify-center text-amber-400 shadow-xl">
+                <FolderOpen className="h-7 w-7 animate-pulse" />
+              </div>
+
+              <div className="space-y-1.5">
+                <h3 className="text-base sm:text-lg font-bold text-white">
+                  {t('batch.selectMethodTitle', 'Elige cómo deseas añadir fotogramas (hasta 1000)')}
+                </h3>
+                <p className="text-xs text-stone-400 max-w-lg mx-auto">
+                  {t(
+                    'batch.selectMethodSubtitle',
+                    'Puedes entrar a las carpetas de tu dispositivo, elegir una carpeta completa, abrir la galería o extraer fotogramas de un archivo existente.'
+                  )}
+                </p>
+              </div>
+
+              {/* Grid of Clear Action Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl mx-auto text-left">
+                {/* Option 1: Carpetas del dispositivo (Explorador) */}
+                <button
+                  type="button"
+                  onClick={() => folderFilesInputRef.current?.click()}
+                  className="group p-3.5 rounded-xl bg-[#141824] hover:bg-[#1A2030] border border-amber-500/40 hover:border-amber-400 transition-all cursor-pointer flex items-start gap-3 shadow-md"
+                >
+                  <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 group-hover:scale-105 transition-transform shrink-0">
+                    <FolderOpen className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5 flex-wrap">
+                      <span>{t('batch.foldersOption', 'Carpetas del dispositivo (Explorador)')}</span>
+                      <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono font-bold">RECOMENDADO</span>
+                    </div>
+                    <p className="text-[11px] text-stone-400 leading-snug">
+                      {t('batch.foldersOptionDesc', 'Navega por Descargas, almacenamiento interno, tarjeta SD y cualquier carpeta de tu móvil.')}
+                    </p>
+                  </div>
+                </button>
+
+                {/* Option 2: Carpeta completa */}
+                <button
+                  type="button"
+                  onClick={handleOpenDirectoryPicker}
+                  className="group p-3.5 rounded-xl bg-[#141824] hover:bg-[#1A2030] border border-sky-500/30 hover:border-sky-400 transition-all cursor-pointer flex items-start gap-3 shadow-md"
+                >
+                  <div className="p-2 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-400 group-hover:scale-105 transition-transform shrink-0">
+                    <FolderArchive className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="text-xs font-bold text-white">
+                      {t('batch.directoryOption', 'Cargar carpeta completa')}
+                    </div>
+                    <p className="text-[11px] text-stone-400 leading-snug">
+                      {t('batch.directoryOptionDesc', 'Importa todas las imágenes contenidas dentro de una carpeta en un solo paso.')}
+                    </p>
+                  </div>
+                </button>
+
+                {/* Option 3: Galería de fotos */}
+                <button
+                  type="button"
+                  onClick={() => galleryInputRef.current?.click()}
+                  className="group p-3.5 rounded-xl bg-[#141824] hover:bg-[#1A2030] border border-rose-500/30 hover:border-rose-400 transition-all cursor-pointer flex items-start gap-3 shadow-md"
+                >
+                  <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 group-hover:scale-105 transition-transform shrink-0">
+                    <ImageIcon className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="text-xs font-bold text-white">
+                      {t('batch.galleryOption', 'Galería de fotos')}
+                    </div>
+                    <p className="text-[11px] text-stone-400 leading-snug">
+                      {t('batch.galleryOptionDesc', 'Selecciona imágenes tomadas con la cámara o guardadas en el carrete de medios.')}
+                    </p>
+                  </div>
+                </button>
+
+                {/* Option 4: Extraer de GIF / Video */}
+                <button
+                  type="button"
+                  onClick={() => mediaExtractInputRef.current?.click()}
+                  className="group p-3.5 rounded-xl bg-[#141824] hover:bg-[#1A2030] border border-emerald-500/30 hover:border-emerald-400 transition-all cursor-pointer flex items-start gap-3 shadow-md"
+                >
+                  <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 group-hover:scale-105 transition-transform shrink-0">
+                    <Film className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="text-xs font-bold text-white">
+                      {t('batch.extractOption', 'Extraer de GIF / WebP / Video')}
+                    </div>
+                    <p className="text-[11px] text-stone-400 leading-snug">
+                      {t('batch.extractOptionDesc', 'Desglosa automáticamente todos los fotogramas de una animación existente.')}
+                    </p>
+                  </div>
+                </button>
+              </div>
+
+              {/* Quick sample demo button */}
+              <div className="pt-1 flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => handleLoadDemo(12)}
+                  className="px-4 py-2 rounded-xl bg-[#141824] hover:bg-[#1F2538] text-amber-300 border border-amber-500/30 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-xs"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                  <span>{t('batch.demoBtn', 'Probar con 12 imágenes demo')}</span>
                 </button>
               </div>
             </div>
           ) : (
             <div className="space-y-3">
-              {/* Scrollable Grid of Uploaded Images */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 max-h-[440px] overflow-y-auto pr-1">
-                {items.map((item, idx) => (
-                  <div
-                    key={item.id}
-                    onClick={() => setSelectedPreviewIndex(idx)}
-                    className={`relative group rounded-xl p-2 bg-[#090A0F] border transition-all cursor-pointer flex flex-col justify-between ${
-                      selectedPreviewIndex === idx
-                        ? 'border-red-500 ring-1 ring-red-500 shadow-lg'
-                        : 'border-[#1E2333] hover:border-[#2D354D]'
-                    }`}
-                  >
-                    {/* Index Badge */}
-                    <div className="absolute top-3 left-3 z-10 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-md text-[10px] font-mono font-bold text-white border border-white/10">
-                      #{idx + 1}
-                    </div>
+              {/* Pagination controls if items > pageSize */}
+              {items.length > pageSize && (
+                <div className="flex items-center justify-between px-2 py-1.5 bg-[#090A0F] border border-[#1E2333] rounded-xl text-xs text-stone-300">
+                  <div className="flex items-center gap-2 font-mono">
+                    <span>
+                      {t('batch.showing', 'Mostrando')} {(currentPage - 1) * pageSize + 1} -{' '}
+                      {Math.min(currentPage * pageSize, items.length)} {t('batch.of', 'de')} {items.length}
+                    </span>
+                    <span className="text-stone-500">|</span>
+                    <span className="text-sky-400 font-bold">
+                      {t('batch.page', 'Pág.')} {currentPage} / {totalPages}
+                    </span>
+                  </div>
 
-                    {/* Quick remove button */}
+                  <div className="flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeItem(idx);
-                      }}
-                      className="absolute top-3 right-3 z-10 p-1 rounded-md bg-black/70 hover:bg-red-600 text-stone-300 hover:text-white transition-all opacity-0 group-hover:opacity-100 cursor-pointer"
-                      title="Quitar imagen"
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(1)}
+                      className="p-1 rounded bg-[#141722] hover:bg-[#1E2333] disabled:opacity-30 border border-[#242A3D] cursor-pointer"
+                      title={t('batch.firstPage', 'Primera página')}
                     >
-                      <X className="h-3 w-3" />
+                      <ChevronsLeft className="h-3.5 w-3.5" />
                     </button>
+                    <button
+                      type="button"
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      className="p-1 rounded bg-[#141722] hover:bg-[#1E2333] disabled:opacity-30 border border-[#242A3D] cursor-pointer"
+                      title={t('batch.prevPage', 'Página anterior')}
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      className="p-1 rounded bg-[#141722] hover:bg-[#1E2333] disabled:opacity-30 border border-[#242A3D] cursor-pointer"
+                      title={t('batch.nextPage', 'Página siguiente')}
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(totalPages)}
+                      className="p-1 rounded bg-[#141722] hover:bg-[#1E2333] disabled:opacity-30 border border-[#242A3D] cursor-pointer"
+                      title={t('batch.lastPage', 'Última página')}
+                    >
+                      <ChevronsRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
 
-                    {/* Image Thumbnail Container */}
-                    <div className="w-full aspect-square rounded-lg bg-[#141722] overflow-hidden flex items-center justify-center border border-white/5">
-                      <img
-                        src={item.previewUrl}
-                        alt={item.name}
-                        className="w-full h-full object-contain"
-                        loading="lazy"
-                      />
-                    </div>
+              {/* Scrollable Grid of Uploaded Images */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 max-h-[440px] overflow-y-auto pr-1">
+                {paginatedItems.map((item, localIdx) => {
+                  const globalIdx = (currentPage - 1) * pageSize + localIdx;
+                  const isSelected = selectedIds.has(item.id);
 
-                    {/* File info footer */}
-                    <div className="mt-2 space-y-0.5">
-                      <p className="text-[11px] font-bold text-stone-200 truncate" title={item.name}>
-                        {item.name}
-                      </p>
-                      <div className="flex items-center justify-between text-[10px] text-stone-400 font-mono">
-                        <span>{formatFileSize(item.size)}</span>
-                        {item.width && item.height && (
-                          <span>
-                            {item.width}x{item.height}
-                          </span>
-                        )}
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setSelectedPreviewIndex(globalIdx)}
+                      className={`relative group rounded-xl p-2 bg-[#090A0F] border transition-all cursor-pointer flex flex-col justify-between ${
+                        selectedPreviewIndex === globalIdx
+                          ? 'border-red-500 ring-1 ring-red-500 shadow-lg'
+                          : isSelected
+                          ? 'border-[#1E2333] hover:border-emerald-500/50'
+                          : 'border-[#1A1D27] opacity-60 hover:opacity-100'
+                      }`}
+                    >
+                      {/* Checkbox Selector */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSelect(item.id);
+                        }}
+                        className={`absolute top-3 left-3 z-10 p-1 rounded-md transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white shadow-md'
+                            : 'bg-black/80 text-stone-400 hover:text-white border border-white/20'
+                        }`}
+                        title={isSelected ? t('batch.deselectFrame', 'Deseleccionar fotograma') : t('batch.selectFrame', 'Elegir fotograma')}
+                      >
+                        {isSelected ? <Check className="h-3 w-3 stroke-[3]" /> : <Square className="h-3 w-3" />}
+                      </button>
+
+                      {/* Index Badge */}
+                      <div className="absolute top-3 right-8 z-10 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-md text-[10px] font-mono font-bold text-white border border-white/10">
+                        #{globalIdx + 1}
+                      </div>
+
+                      {/* Quick remove button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeItem(globalIdx);
+                        }}
+                        className="absolute top-3 right-3 z-10 p-1 rounded-md bg-black/70 hover:bg-red-600 text-stone-300 hover:text-white transition-all opacity-0 group-hover:opacity-100 cursor-pointer"
+                        title={t('batch.removeImage', 'Quitar imagen')}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+
+                      {/* Image Thumbnail Container */}
+                      <div className="w-full aspect-square rounded-lg bg-[#141722] overflow-hidden flex items-center justify-center border border-white/5 mt-5">
+                        <img
+                          src={item.previewUrl}
+                          alt={item.name}
+                          className={`w-full h-full object-contain transition-all ${
+                            isSelected ? '' : 'grayscale contrast-75'
+                          }`}
+                          loading="lazy"
+                        />
+                      </div>
+
+                      {/* File info footer */}
+                      <div className="mt-2 space-y-0.5">
+                        <p className="text-[11px] font-bold text-stone-200 truncate" title={item.name}>
+                          {item.name}
+                        </p>
+                        <div className="flex items-center justify-between text-[10px] text-stone-400 font-mono">
+                          <span>{formatFileSize(item.size)}</span>
+                          {item.width && item.height && (
+                            <span>
+                              {item.width}x{item.height}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Reorder arrows on hover */}
+                      <div className="flex items-center justify-between mt-2 pt-1 border-t border-white/5 text-[11px] text-stone-400">
+                        <button
+                          type="button"
+                          disabled={globalIdx === 0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            moveItem(globalIdx, 'up');
+                          }}
+                          className="p-1 rounded hover:bg-white/10 disabled:opacity-30 cursor-pointer"
+                          title={t('batch.moveUp', 'Mover antes')}
+                        >
+                          <ArrowUp className="h-3 w-3" />
+                        </button>
+                        <span className="text-[9px] uppercase tracking-wider text-stone-400">
+                          {isSelected ? t('batch.chosen', 'Elegido') : t('batch.excluded', 'Excluido')}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={globalIdx === items.length - 1}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            moveItem(globalIdx, 'down');
+                          }}
+                          className="p-1 rounded hover:bg-white/10 disabled:opacity-30 cursor-pointer"
+                          title={t('batch.moveDown', 'Mover después')}
+                        >
+                          <ArrowDown className="h-3 w-3" />
+                        </button>
                       </div>
                     </div>
-
-                    {/* Reorder arrows on hover */}
-                    <div className="flex items-center justify-between mt-2 pt-1 border-t border-white/5 text-[11px] text-stone-400">
-                      <button
-                        type="button"
-                        disabled={idx === 0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          moveItem(idx, 'up');
-                        }}
-                        className="p-1 rounded hover:bg-white/10 disabled:opacity-30 cursor-pointer"
-                        title="Mover antes"
-                      >
-                        <ArrowUp className="h-3 w-3" />
-                      </button>
-                      <span className="text-[9px] uppercase tracking-wider text-stone-400">Posición</span>
-                      <button
-                        type="button"
-                        disabled={idx === items.length - 1}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          moveItem(idx, 'down');
-                        }}
-                        className="p-1 rounded hover:bg-white/10 disabled:opacity-30 cursor-pointer"
-                        title="Mover después"
-                      >
-                        <ArrowDown className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Add more button footer */}
-              <div className="flex items-center justify-between text-xs text-stone-400 px-1">
+              <div className="flex items-center justify-between text-xs text-stone-400 px-1 pt-1">
                 <span>
-                  Tip: Arrastra más archivos en cualquier momento para agregarlos a la secuencia.
+                  {t(
+                    'batch.tipAddMore',
+                    'Tip: Puedes elegir o arrastrar más fotogramas en cualquier momento (hasta 1000).'
+                  )}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1 cursor-pointer"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>Añadir más fotos</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => mediaExtractInputRef.current?.click()}
+                    className="text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
+                    title={t('batch.extractFramesTitle', 'Extrae fotogramas de GIF, WebP o video')}
+                  >
+                    <Film className="h-3.5 w-3.5" />
+                    <span>{t('batch.extractFrames', 'Extraer')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => galleryInputRef.current?.click()}
+                    className="text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1 cursor-pointer"
+                    title={t('batch.chooseGalleryTitle', 'Abrir la galería de fotos')}
+                  >
+                    <ImageIcon className="h-3.5 w-3.5" />
+                    <span>{t('batch.chooseGallery', 'Galería')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenDirectoryPicker}
+                    className="text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1 cursor-pointer"
+                    title={t('batch.chooseDirectoryTitle', 'Cargar carpeta completa')}
+                  >
+                    <FolderArchive className="h-3.5 w-3.5" />
+                    <span>{t('batch.chooseDirectory', 'Carpeta')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => folderFilesInputRef.current?.click()}
+                    className="text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 cursor-pointer bg-amber-950/40 px-2 py-0.5 rounded border border-amber-500/30"
+                    title={t('batch.chooseFoldersTitle', 'Abre el explorador de archivos para entrar a cualquier carpeta del dispositivo')}
+                  >
+                    <FolderOpen className="h-3.5 w-3.5" />
+                    <span>{t('batch.chooseFolders', 'Carpetas')}</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -692,11 +1361,11 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                 <div className="flex items-center gap-2">
                   <Sliders className="h-4 w-4 text-sky-400" />
                   <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">
-                    Ajustes de Animación WebP
+                    {t('batch.animatedSettings', 'Ajustes de Animación WebP')}
                   </span>
                 </div>
                 <span className="text-[11px] text-sky-400 font-mono font-bold">
-                  {items.length} fotogramas
+                  {selectedItems.length > 0 ? selectedItems.length : items.length} {t('batch.framesCount', 'fotogramas')}
                 </span>
               </div>
 
@@ -705,10 +1374,10 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-stone-300 font-semibold flex items-center gap-1.5">
                     <Clock className="h-3.5 w-3.5 text-stone-400" />
-                    Velocidad (FPS / Fotogramas por segundo):
+                    {t('batch.fpsLabel', 'Velocidad (FPS / Fotogramas por segundo):')}
                   </span>
                   <span className="font-mono font-bold text-white px-2 py-0.5 rounded bg-[#181D2C] border border-[#2B334D]">
-                    {fps} FPS ({delayMs} ms/cuadro)
+                    {fps} FPS ({delayMs} {t('batch.msPerFrame', 'ms/cuadro')})
                   </span>
                 </div>
 
@@ -766,7 +1435,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                     className={`py-1 rounded border transition-colors cursor-pointer ${
                       fps === 30 ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-[#121622] text-emerald-400 border-emerald-900/40 hover:border-emerald-700'
                     }`}
-                    title="30 FPS exacto calibrado a 34ms para Vyzer / Discord"
+                    title={t('batch.fpsVyzerTitle', '30 FPS exacto calibrado a 34ms para Vyzer / Discord')}
                   >
                     30 FPS (Vyzer)
                   </button>
@@ -776,7 +1445,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
               {/* WebP Quality Slider */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-stone-300 font-semibold">Calidad de Compresión WebP:</span>
+                  <span className="text-stone-300 font-semibold">{t('batch.qualityLabel', 'Calidad de Compresión WebP:')}</span>
                   <span className="font-mono font-bold text-white px-2 py-0.5 rounded bg-[#181D2C] border border-[#2B334D]">
                     {quality}%
                   </span>
@@ -795,7 +1464,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
               {/* Dimensions Presets */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-stone-300 font-semibold">Resolución de Salida:</span>
+                  <span className="text-stone-300 font-semibold">{t('batch.resolutionLabel', 'Resolución de Salida:')}</span>
                   <span className="text-[11px] font-mono text-sky-400">
                     {targetOutputDimensions.width} x {targetOutputDimensions.height} px
                   </span>
@@ -810,7 +1479,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                         : 'bg-[#121622] text-stone-300 border-[#20273A] hover:border-stone-600'
                     }`}
                   >
-                    Original
+                    {t('batch.presetOriginal', 'Original')}
                   </button>
                   <button
                     type="button"
@@ -820,7 +1489,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                         ? 'bg-emerald-600 text-white border-emerald-500 font-bold'
                         : 'bg-[#121622] text-emerald-400 border-emerald-900/40 hover:border-emerald-700'
                     }`}
-                    title="1000 x 1000 px para molduras de avatar de Vyzer / Discord"
+                    title={t('batch.presetVyzerTitle', '1000 x 1000 px para molduras de avatar de Vyzer / Discord')}
                   >
                     Vyzer 1000px
                   </button>
@@ -833,7 +1502,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                         : 'bg-[#121622] text-stone-300 border-[#20273A] hover:border-stone-600'
                     }`}
                   >
-                    Sticker 512px
+                    {t('batch.presetSticker', 'Sticker 512px')}
                   </button>
                   <button
                     type="button"
@@ -844,23 +1513,23 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                         : 'bg-[#121622] text-stone-300 border-[#20273A] hover:border-stone-600'
                     }`}
                   >
-                    Escala 50%
+                    {t('batch.presetScale50', 'Escala 50%')}
                   </button>
                 </div>
               </div>
 
               {/* Loop Count */}
               <div className="flex items-center justify-between pt-1 text-xs">
-                <span className="text-stone-300 font-semibold">Bucle de Reproducción:</span>
+                <span className="text-stone-300 font-semibold">{t('batch.loopLabel', 'Bucle de Reproducción:')}</span>
                 <select
                   value={loopCount}
                   onChange={(e) => setLoopCount(parseInt(e.target.value))}
                   className="bg-[#141722] border border-[#242A3D] text-white rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-red-500 cursor-pointer"
                 >
-                  <option value={0}>Infinito (Bucle continuo)</option>
-                  <option value={1}>1 sola vez (Sin bucle)</option>
-                  <option value={3}>3 repeticiones</option>
-                  <option value={5}>5 repeticiones</option>
+                  <option value={0}>{t('batch.loopInfinite', 'Infinito (Bucle continuo)')}</option>
+                  <option value={1}>{t('batch.loopOnce', '1 sola vez (Sin bucle)')}</option>
+                  <option value={3}>3 {t('batch.loopTimes', 'repeticiones')}</option>
+                  <option value={5}>5 {t('batch.loopTimes', 'repeticiones')}</option>
                 </select>
               </div>
 
@@ -874,13 +1543,16 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                 {isProcessing ? (
                   <>
                     <RefreshCw className="h-4 w-4 animate-spin" />
-                    <span>{statusText || 'Procesando imágenes...'}</span>
+                    <span>{statusText || t('batch.processingImages', 'Procesando imágenes...')}</span>
                   </>
                 ) : (
                   <>
                     <Zap className="h-4 w-4 fill-white" />
                     <span>
-                      Convertir {items.length} imágenes a 1 archivo WebP
+                      {t('batch.convertAnimated', 'Convertir {count} fotogramas elegidos a 1 archivo WebP').replace(
+                        '{count}',
+                        String(itemsToProcess.length)
+                      )}
                     </span>
                   </>
                 )}
@@ -895,22 +1567,25 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                 <div className="flex items-center gap-2">
                   <FileArchive className="h-4 w-4 text-emerald-400" />
                   <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">
-                    Ajustes de Lote WebP ZIP
+                    {t('batch.zipSettings', 'Ajustes de Lote WebP ZIP')}
                   </span>
                 </div>
                 <span className="text-[11px] text-emerald-400 font-mono font-bold">
-                  {items.length} archivos
+                  {itemsToProcess.length} {t('batch.filesCount', 'archivos')}
                 </span>
               </div>
 
               <p className="text-xs text-stone-400">
-                Convierte cada una de tus {items.length} fotos a formato WebP moderno con máxima compresión y las empaqueta en un único archivo descargable .ZIP.
+                {t(
+                  'batch.zipDesc',
+                  'Convierte cada una de tus {count} fotos a formato WebP moderno con máxima compresión y las empaqueta en un único archivo descargable .ZIP.'
+                ).replace('{count}', String(itemsToProcess.length))}
               </p>
 
               {/* Quality Slider */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-stone-300 font-semibold">Calidad WebP por imagen:</span>
+                  <span className="text-stone-300 font-semibold">{t('batch.zipQualityLabel', 'Calidad WebP por imagen:')}</span>
                   <span className="font-mono font-bold text-white px-2 py-0.5 rounded bg-[#181D2C] border border-[#2B334D]">
                     {quality}%
                   </span>
@@ -936,13 +1611,16 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                 {isProcessing ? (
                   <>
                     <RefreshCw className="h-4 w-4 animate-spin" />
-                    <span>{statusText || 'Convirtiendo a WebP...'}</span>
+                    <span>{statusText || t('batch.convertingToWebp', 'Convirtiendo a WebP...')}</span>
                   </>
                 ) : (
                   <>
                     <FolderDown className="h-4 w-4" />
                     <span>
-                      Convertir {items.length} fotos y descargar .ZIP
+                      {t('batch.convertZip', 'Convertir {count} fotos y descargar .ZIP').replace(
+                        '{count}',
+                        String(itemsToProcess.length)
+                      )}
                     </span>
                   </>
                 )}
@@ -973,11 +1651,11 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                   <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">
-                    ¡Archivo WebP Animado Listo!
+                    {t('batch.animatedReady', '¡Archivo WebP Animado Listo!')}
                   </span>
                 </div>
                 <span className="px-2 py-0.5 rounded bg-red-950/60 text-red-400 border border-red-500/40 text-[10px] font-mono font-bold">
-                  {animatedResult.frameCount} FOTOGRAMAS
+                  {animatedResult.frameCount} {t('batch.framesCount', 'FOTOGRAMAS')}
                 </span>
               </div>
 
@@ -985,7 +1663,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
               <div className="relative w-full aspect-square max-h-[300px] rounded-xl bg-[#05060A] border border-[#222736] overflow-hidden flex items-center justify-center p-2">
                 <img
                   src={animatedResult.url}
-                  alt="WebP Animado Resultante"
+                  alt={t('batch.resultAlt', 'WebP Animado Resultante')}
                   className="max-w-full max-h-full object-contain"
                 />
 
@@ -997,11 +1675,15 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
               {/* Stats: Original vs Output */}
               <div className="grid grid-cols-2 gap-2 text-xs font-mono">
                 <div className="p-2.5 rounded-lg bg-[#141722] border border-[#23293D] space-y-0.5">
-                  <span className="text-[10px] text-stone-400 block">Total {items.length} fotos originales:</span>
+                  <span className="text-[10px] text-stone-400 block">
+                    {t('batch.origWeight', 'Total fotos originales:')}
+                  </span>
                   <span className="font-bold text-stone-300">{formatFileSize(totalOriginalSize)}</span>
                 </div>
                 <div className="p-2.5 rounded-lg bg-[#141722] border border-[#23293D] space-y-0.5">
-                  <span className="text-[10px] text-stone-400 block">Peso archivo WebP final:</span>
+                  <span className="text-[10px] text-stone-400 block">
+                    {t('batch.finalWeight', 'Peso archivo WebP final:')}
+                  </span>
                   <span className="font-bold text-emerald-400">
                     {formatFileSize(animatedResult.totalSize)}
                     {totalOriginalSize > animatedResult.totalSize && (
@@ -1021,7 +1703,9 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                   className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 transition-all cursor-pointer"
                 >
                   <Download className="h-4 w-4" />
-                  <span>Descargar animacion.webp ({formatFileSize(animatedResult.totalSize)})</span>
+                  <span>
+                    {t('batch.downloadWebp', 'Descargar animacion.webp')} ({formatFileSize(animatedResult.totalSize)})
+                  </span>
                 </button>
 
                 <div className="flex gap-2">
@@ -1030,7 +1714,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                     onClick={() => window.open(animatedResult.url, '_blank')}
                     className="flex-1 py-2 rounded-lg bg-[#151926] hover:bg-[#1E2436] text-stone-300 hover:text-white border border-[#262E44] text-xs font-semibold transition-colors cursor-pointer"
                   >
-                    Abrir en pestaña nueva
+                    {t('batch.openNewTab', 'Abrir en pestaña nueva')}
                   </button>
                   {onChainResult && (
                     <button
@@ -1041,7 +1725,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                       }}
                       className="flex-1 py-2 rounded-lg bg-[#151926] hover:bg-[#1E2436] text-amber-300 hover:text-amber-200 border border-amber-500/30 text-xs font-semibold transition-colors cursor-pointer"
                     >
-                      Optimizar peso
+                      {t('batch.optimizeWeight', 'Optimizar peso')}
                     </button>
                   )}
                 </div>
@@ -1056,22 +1740,22 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                   <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">
-                    ¡Lote ZIP Empaquetado!
+                    {t('batch.zipReady', '¡Lote ZIP Empaquetado!')}
                   </span>
                 </div>
                 <span className="px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-500/40 text-[10px] font-mono font-bold">
-                  {zipResult.convertedFiles.length} ARCHIVOS WEBP
+                  {zipResult.convertedFiles.length} {t('batch.webpFiles', 'ARCHIVOS WEBP')}
                 </span>
               </div>
 
               {/* Stats */}
               <div className="grid grid-cols-2 gap-2 text-xs font-mono">
                 <div className="p-2.5 rounded-lg bg-[#141722] border border-[#23293D] space-y-0.5">
-                  <span className="text-[10px] text-stone-400 block">Tamaño original:</span>
+                  <span className="text-[10px] text-stone-400 block">{t('batch.originalSize', 'Tamaño original:')}</span>
                   <span className="font-bold text-stone-300">{formatFileSize(zipResult.totalOriginalSize)}</span>
                 </div>
                 <div className="p-2.5 rounded-lg bg-[#141722] border border-[#23293D] space-y-0.5">
-                  <span className="text-[10px] text-stone-400 block">Tamaño archivo .ZIP:</span>
+                  <span className="text-[10px] text-stone-400 block">{t('batch.zipSize', 'Tamaño archivo .ZIP:')}</span>
                   <span className="font-bold text-emerald-400">
                     {formatFileSize(zipResult.zipBlob.size)}
                     <span className="text-[10px] text-emerald-500 ml-1">
@@ -1087,7 +1771,9 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                 className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 transition-all cursor-pointer"
               >
                 <Download className="h-4 w-4" />
-                <span>Descargar archivo .ZIP ({formatFileSize(zipResult.zipBlob.size)})</span>
+                <span>
+                  {t('batch.zipDownload', 'Descargar archivo .ZIP')} ({formatFileSize(zipResult.zipBlob.size)})
+                </span>
               </button>
             </div>
           )}
