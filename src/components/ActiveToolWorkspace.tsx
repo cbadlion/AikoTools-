@@ -404,8 +404,8 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2500);
       notifyUser({
-        title: '📋 Copiado al portapapeles',
-        body: 'La imagen se copió en alta resolución. Lista para pegar en cualquier chat o documento.',
+        title: `📋 ${t('interactive.copiedTitle', 'Copiado al portapapeles')}`,
+        body: t('interactive.copiedBody', 'La imagen se copió en alta resolución. Lista para pegar en cualquier chat o documento.'),
         type: 'success'
       });
     } catch (err) {
@@ -466,8 +466,8 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
           setEyedropperSampledHex(hex);
           setIsEyedropperActive(false);
           notifyUser({
-            title: 'Color muestreado',
-            body: `Color ${hex} fijado como origen (${naturalX}x${naturalY}px)`,
+            title: t('interactive.colorSampled', 'Color muestreado'),
+            body: `${t('interactive.colorFixed', 'Color')} ${hex} (${naturalX}x${naturalY}px)`,
             type: 'success'
           });
         }
@@ -1093,9 +1093,10 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
         setStatus('done');
 
         // Notify the user immediately with no delay
+        const toolTitle = t(`tool.${tool.id}.name`, tool.name);
         notifyUser({
-          title: `✨ ${tool.name} completado`,
-          body: `Tu archivo "${res.fileName}" está listo para descargar (${formatFileSize(res.newSize)}).`
+          title: `✨ ${toolTitle} ${t('workspace.completed', 'completado')}`,
+          body: `${t('workspace.fileReady', 'Tu archivo')} "${res.fileName}" ${t('workspace.readyToDownload', 'está listo para descargar')} (${formatFileSize(res.newSize)}).`
         });
 
         // Automatically persist to 1-hour history storage in background without blocking UI

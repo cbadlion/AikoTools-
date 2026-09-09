@@ -333,8 +333,8 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
       // Trigger chime and notification toast
       playSuccessChime();
       notifyUser({
-        title: `¡${toolName} completado por IA!`,
-        body: `Archivo listo: ${result.fileName} (${Math.round(result.newSize / 1024)} KB)`,
+        title: `✨ ${toolName} ${t('ai.completedByAi', 'completado por IA')}`,
+        body: `${t('workspace.fileReady', 'Archivo listo')}: ${result.fileName} (${Math.round(result.newSize / 1024)} KB)`,
         previewUrl: result.url
       });
     }

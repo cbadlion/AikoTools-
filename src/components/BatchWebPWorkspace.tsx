@@ -947,7 +947,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
               <div className="flex items-center gap-2">
                 <Info className="h-4 w-4 text-sky-400 shrink-0" />
                 <span>
-                  {t('batch.capacityProgress', `Cargadas ${items.length} de 1000 imágenes. Puedes seguir sumando más fotos:`)}
+                  {t('batch.capacityProgress', 'Cargadas {count} de 1000 imágenes. Puedes seguir sumando más fotos:').replace('{count}', String(items.length))}
                 </span>
               </div>
               <button
@@ -1071,7 +1071,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                   <div className="space-y-0.5 min-w-0">
                     <div className="text-xs font-bold text-white flex items-center gap-1.5 flex-wrap">
                       <span>{t('batch.foldersOption', 'Carpetas del dispositivo (Explorador)')}</span>
-                      <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono font-bold">HASTA 1000 FOTOS</span>
+                      <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono font-bold">{t('batch.upTo1000Badge', 'HASTA 1000 FOTOS')}</span>
                     </div>
                     <p className="text-[11px] text-stone-400 leading-snug">
                       {t('batch.foldersOptionDesc', 'Navega por Descargas, DCIM o carpetas sin el límite de 100 fotos del selector de Google Fotos.')}

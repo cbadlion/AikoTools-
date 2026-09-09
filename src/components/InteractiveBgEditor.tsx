@@ -492,8 +492,8 @@ export const InteractiveBgEditor: React.FC<InteractiveBgEditorProps> = ({
     }
 
     notifyUser({
-      title: '✨ Recorte listo',
-      body: `Tu archivo "${fileName}" se ha generado con éxito (${formatFileSize(res.newSize)}).`
+      title: `✨ ${t('interactive.cutReadyTitle', 'Recorte listo')}`,
+      body: `${t('workspace.fileReady', 'Tu archivo')} "${fileName}" ${t('workspace.generatedSuccess', 'se ha generado con éxito')} (${formatFileSize(res.newSize)}).`
     });
   };
 

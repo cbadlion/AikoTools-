@@ -324,7 +324,7 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, onFilesS
                       }}
                       className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-sky-950/50 hover:bg-sky-900/60 border border-sky-500/50 text-xs font-bold text-sky-300 hover:text-white transition-all cursor-pointer shadow-xs col-span-2 sm:col-span-1"
                     >
-                      <span>🗂️ 12 Fotos Demo</span>
+                      <span>🗂️ {t('batch.demoBtn', 'Demo 12 fotos')}</span>
                     </button>
                   )}
 
