@@ -746,12 +746,12 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
         }}
       />
 
-      {/* 3. Traditional Gallery Photo Picker */}
+      {/* 3. Universal Gallery Photo / Media Picker without 100-item system restriction */}
       <input
         ref={galleryInputRef}
         type="file"
         multiple
-        accept="image/*"
+        accept="*/*"
         className="hidden"
         onChange={(e) => {
           if (e.target.files && e.target.files.length > 0) {
@@ -857,10 +857,10 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                 type="button"
                 onClick={() => folderFilesInputRef.current?.click()}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-950/40 hover:bg-amber-900/50 border border-amber-500/40 text-xs font-bold text-amber-300 hover:text-white transition-all cursor-pointer shadow-xs"
-                title={t('batch.chooseFoldersTitle', 'Abre el explorador de archivos para entrar a Descargas, almacenamiento interno y carpetas del dispositivo')}
+                title={t('batch.chooseFoldersTitle', 'Abre el explorador de archivos para entrar a Descargas, almacenamiento interno y carpetas del dispositivo (hasta 1000 fotos)')}
               >
                 <FolderOpen className="h-3.5 w-3.5 text-amber-400" />
-                <span>{t('batch.chooseFolders', 'Carpetas del dispositivo')}</span>
+                <span>{t('batch.chooseFolders', 'Carpetas (hasta 1000)')}</span>
               </button>
 
               {/* Button: Carpeta completa */}
@@ -879,7 +879,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                 type="button"
                 onClick={() => galleryInputRef.current?.click()}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#181D2C] hover:bg-[#22293E] border border-[#2B334D] text-xs font-bold text-stone-300 hover:text-white transition-all cursor-pointer shadow-xs"
-                title={t('batch.chooseGalleryTitle', 'Abrir la galería de fotos del dispositivo')}
+                title={t('batch.chooseGalleryTitle', 'Abrir selector de medios')}
               >
                 <ImageIcon className="h-3.5 w-3.5 text-rose-400" />
                 <span className="hidden sm:inline">{t('batch.chooseGallery', 'Galería')}</span>
@@ -940,6 +940,26 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
               )}
             </div>
           </div>
+
+          {/* Capacity and multi-batch notice */}
+          {items.length > 0 && items.length < MAX_BATCH_ITEMS && (
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl bg-sky-950/25 border border-sky-500/30 text-xs text-sky-200">
+              <div className="flex items-center gap-2">
+                <Info className="h-4 w-4 text-sky-400 shrink-0" />
+                <span>
+                  {t('batch.capacityProgress', `Cargadas ${items.length} de 1000 imágenes. Puedes seguir sumando más fotos:`)}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => folderFilesInputRef.current?.click()}
+                className="px-3 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/50 text-white font-bold text-xs transition-all shrink-0 cursor-pointer flex items-center gap-1.5 shadow-xs"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>{t('batch.addMorePhotos', '+ Añadir más (hasta 1000)')}</span>
+              </button>
+            </div>
+          )}
 
           {/* Selection Filter Bar (Select All / None / Invert / Evens / Odds / Keep Selected) */}
           {items.length > 0 && (
@@ -1051,10 +1071,10 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                   <div className="space-y-0.5 min-w-0">
                     <div className="text-xs font-bold text-white flex items-center gap-1.5 flex-wrap">
                       <span>{t('batch.foldersOption', 'Carpetas del dispositivo (Explorador)')}</span>
-                      <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono font-bold">RECOMENDADO</span>
+                      <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono font-bold">HASTA 1000 FOTOS</span>
                     </div>
                     <p className="text-[11px] text-stone-400 leading-snug">
-                      {t('batch.foldersOptionDesc', 'Navega por Descargas, almacenamiento interno, tarjeta SD y cualquier carpeta de tu móvil.')}
+                      {t('batch.foldersOptionDesc', 'Navega por Descargas, DCIM o carpetas sin el límite de 100 fotos del selector de Google Fotos.')}
                     </p>
                   </div>
                 </button>
@@ -1092,7 +1112,7 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                       {t('batch.galleryOption', 'Galería de fotos')}
                     </div>
                     <p className="text-[11px] text-stone-400 leading-snug">
-                      {t('batch.galleryOptionDesc', 'Selecciona imágenes tomadas con la cámara o guardadas en el carrete de medios.')}
+                      {t('batch.galleryOptionDesc', 'Selector de medios. Si te limita a 100 fotos, usa "Carpetas" o pulsa ⋮ > Examinar.')}
                     </p>
                   </div>
                 </button>
@@ -1115,6 +1135,22 @@ export const BatchWebPWorkspace: React.FC<BatchWebPWorkspaceProps> = ({
                     </p>
                   </div>
                 </button>
+              </div>
+
+              {/* Android Photo Picker 100-limit guidance box */}
+              <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/35 text-left max-w-2xl mx-auto flex items-start gap-3">
+                <Info className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1.5 text-xs">
+                  <div className="font-bold text-amber-300">
+                    {t('batch.android100LimitTitle', '¿Por qué Android dice "Elige 100 elementos como máximo"?')}
+                  </div>
+                  <p className="text-stone-300 text-[11px] leading-relaxed">
+                    {t(
+                      'batch.android100LimitDesc',
+                      'Ese límite de 100 es una restricción exclusiva del selector de fotos de Google Fotos en Android. Para subir hasta 1000 imágenes: pulsa en "Carpetas del dispositivo (Explorador)", o dentro de Google Fotos toca el menú de tres puntos (⋮) en la esquina superior y pulsa "Examinar". También puedes pulsar "Listo", cargar esas 100 y luego tocar "+ Añadir más" sucesivamente hasta alcanzar 1000 fotos.'
+                    )}
+                  </p>
+                </div>
               </div>
 
               {/* Quick sample demo button */}

@@ -24,7 +24,9 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, onFilesS
   const folderInputRef = useRef<HTMLInputElement>(null);
   const progressTimerRef = useRef<any>(null);
 
-  const acceptedFormats = selectedTool ? selectedTool.acceptedMime : 'image/*,video/*,.gif,.webp';
+  const acceptedFormats = selectedTool?.id === 'batch-webp' 
+    ? '*/*' 
+    : (selectedTool ? selectedTool.acceptedMime : 'image/*,video/*,.gif,.webp');
   const toolColor = selectedTool?.accentHex || theme.primary;
 
   const startUploadSimulation = (file: File) => {
@@ -250,9 +252,16 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, onFilesS
               <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
                 {t('upload.title', 'Toca o arrastra tus archivos aquí')}
               </h3>
-              <p className="text-xs sm:text-sm text-stone-400 mt-1 mb-6 max-w-md">
+              <p className="text-xs sm:text-sm text-stone-400 mt-1 mb-4 max-w-md">
                 {t('upload.subtitle', 'Formatos soportados: PNG, JPG, WebP, GIF, MP4, WebM, SVG, AVIF')}
               </p>
+
+              {selectedTool?.id === 'batch-webp' && (
+                <div className="mb-5 inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>{t('batch.proEngineNotice', 'Capacidad para hasta 1000 imágenes / fotogramas')}</span>
+                </div>
+              )}
 
               {/* Main Action Buttons */}
               <div className="flex flex-col sm:flex-row items-center gap-3">
@@ -267,7 +276,11 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelected, onFilesS
                   className="flex items-center justify-center gap-2 rounded-xl active:scale-95 px-6 py-3 text-sm font-bold text-white border border-white/20 transition-all min-h-[46px] tracking-wide cursor-pointer hover:brightness-110"
                 >
                   <Upload className="h-4 w-4 stroke-[2.5]" />
-                  <span>{t('upload.selectBtn', 'Elegir archivo')}</span>
+                  <span>
+                    {selectedTool?.id === 'batch-webp'
+                      ? t('batch.chooseFrames', 'Elegir fotogramas (hasta 1000)')
+                      : t('upload.selectBtn', 'Elegir archivo')}
+                  </span>
                 </button>
 
                 <button
