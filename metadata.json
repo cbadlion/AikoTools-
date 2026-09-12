@@ -1,9 +1,7 @@
 {
   "name": "AikoTools",
-  "description": "Herramientas multimedia rápidas, modernas y sin publicidad para celular con procesamiento directo en tu dispositivo.",
-  "requestFramePermissions": [
-    "microphone"
-  ],
+  "description": "Tu suite multimedia profesional, 100% libre y sin datos. Optimiza, convierte, procesa y edita imágenes, audio y vídeo directamente en el navegador.",
+  "requestFramePermissions": ["camera", "microphone"],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]

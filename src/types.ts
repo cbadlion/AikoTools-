@@ -21,12 +21,14 @@ export type ToolCategory =
   | 'svg'
   | 'analyzer'
   | 'enhance'
-  | 'smooth';
+  | 'smooth'
+  | 'lineart';
 
 export type ToolId =
   | 'ai-image-generator'
   | 'bg-remover'
   | 'recolor-tools'
+  | 'lineart-tools'
   | 'converter-tools'
   | 'effects-tools'
   | 'palette-tools'
@@ -48,7 +50,8 @@ export type ToolId =
   | 'enhance-tools'
   | 'smooth-tools'
   | 'screen-recorder'
-  | 'batch-webp';
+  | 'batch-webp'
+  | 'mp3-to-url';
 
 export interface ToolDefinition {
   id: ToolId;

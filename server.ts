@@ -1,5 +1,7 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
+import { execSync } from "child_process";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
@@ -254,10 +256,822 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json({ limit: "50mb" }));
+  app.use(express.raw({ type: "application/octet-stream", limit: "150mb" }));
 
   // API Routes
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", service: "aikotools-api", hasGemini: !!process.env.GEMINI_API_KEY });
+  });
+
+  // --- AUDIO / MP3 STORAGE AND STREAMING ENGINE ---
+  const AUDIO_DIR = path.join(process.cwd(), "data", "audio");
+  if (!fs.existsSync(AUDIO_DIR)) {
+    fs.mkdirSync(AUDIO_DIR, { recursive: true });
+  }
+  const AUDIO_INDEX_PATH = path.join(AUDIO_DIR, "index.json");
+
+  interface AudioRecord {
+    id: string;
+    filename: string;
+    sanitizedFilename: string;
+    size: number;
+    mimeType: string;
+    duration?: number;
+    createdAt: string;
+  }
+
+  function getAudioRecords(): AudioRecord[] {
+    try {
+      if (fs.existsSync(AUDIO_INDEX_PATH)) {
+        const raw = fs.readFileSync(AUDIO_INDEX_PATH, "utf-8");
+        return JSON.parse(raw);
+      }
+    } catch (e) {
+      console.warn("Could not read audio index:", e);
+    }
+    return [];
+  }
+
+  function saveAudioRecords(records: AudioRecord[]) {
+    try {
+      fs.writeFileSync(AUDIO_INDEX_PATH, JSON.stringify(records, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("Could not save audio index:", e);
+    }
+  }
+
+  // Server-side robust audio processor with ffmpeg and ffprobe
+  function processAudioWithFfmpeg(
+    inputBuffer: Buffer,
+    originalFilename: string,
+    options: { optimize?: boolean; targetKbps?: number } = {}
+  ): {
+    buffer: Buffer;
+    filename: string;
+    duration: number;
+    mimeType: string;
+    wasConverted: boolean;
+    savingsPercent: number;
+  } {
+    const tempId = `aud_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
+    const tempInput = path.join("/tmp", `${tempId}_in`);
+    const tempOutput = path.join("/tmp", `${tempId}_out.mp3`);
+
+    let duration = 0;
+    let codecName = "";
+    const originalSize = inputBuffer.length;
+
+    try {
+      fs.writeFileSync(tempInput, inputBuffer);
+
+      try {
+        const probeStr = execSync(
+          `ffprobe -v quiet -print_format json -show_format -show_streams "${tempInput}"`,
+          { encoding: "utf-8", timeout: 8000 }
+        );
+        const probeData = JSON.parse(probeStr);
+        duration = parseFloat(probeData.format?.duration || "0") || 0;
+        codecName = (
+          probeData.streams?.find((s: any) => s.codec_type === "audio")?.codec_name || ""
+        ).toLowerCase();
+      } catch (e) {
+        console.warn("ffprobe inspection warning:", e);
+      }
+
+      const isMp3 = codecName === "mp3" || originalFilename.toLowerCase().endsWith(".mp3");
+      const shouldConvert = !isMp3 || options.optimize;
+
+      if (shouldConvert) {
+        const bitrate = options.optimize ? `${options.targetKbps || 96}k` : "128k";
+        execSync(
+          `ffmpeg -y -i "${tempInput}" -vn -c:a libmp3lame -b:a ${bitrate} -ar 44100 "${tempOutput}"`,
+          { timeout: 45000 }
+        );
+
+        if (fs.existsSync(tempOutput) && fs.statSync(tempOutput).size > 100) {
+          const convertedBuf = fs.readFileSync(tempOutput);
+
+          if (!duration) {
+            try {
+              const p = execSync(
+                `ffprobe -v quiet -print_format json -show_format "${tempOutput}"`,
+                { encoding: "utf-8", timeout: 5000 }
+              );
+              duration = parseFloat(JSON.parse(p).format?.duration || "0") || 0;
+            } catch {}
+          }
+
+          const baseName = originalFilename.replace(/\.[^/.]+$/, "");
+          const finalName = `${baseName}.mp3`;
+          const savings = Math.max(
+            0,
+            Math.round(((originalSize - convertedBuf.length) / originalSize) * 100)
+          );
+
+          return {
+            buffer: convertedBuf,
+            filename: finalName,
+            duration,
+            mimeType: "audio/mpeg",
+            wasConverted: true,
+            savingsPercent: savings,
+          };
+        }
+      }
+
+      // Default to original if already MP3 or if conversion was bypassed
+      const cleanName = originalFilename.toLowerCase().endsWith(".mp3")
+        ? originalFilename
+        : `${originalFilename.replace(/\.[^/.]+$/, "")}.mp3`;
+
+      // If duration is 0, verify if it actually has an audio stream
+      if (!duration || duration <= 0) {
+        try {
+          const probe = execSync(
+            `ffprobe -v quiet -print_format json -show_streams -show_format "${tempInput}"`,
+            { encoding: "utf-8", timeout: 5000 }
+          );
+          const probeData = JSON.parse(probe);
+          const hasAudio = (probeData.streams || []).some((s: any) => s.codec_type === "audio");
+          if (!hasAudio) {
+            throw new Error("El archivo no contiene ninguna pista de audio válida");
+          }
+          duration = parseFloat(probeData.format?.duration || "0") || 0;
+        } catch (e: any) {
+          if (e.message?.includes("pista de audio")) throw e;
+        }
+      }
+
+      return {
+        buffer: inputBuffer,
+        filename: cleanName,
+        duration,
+        mimeType: "audio/mpeg",
+        wasConverted: false,
+        savingsPercent: 0,
+      };
+    } catch (err: any) {
+      if (err.message && err.message.includes("pista de audio")) {
+        throw err;
+      }
+      console.warn("Audio processing fallback to raw buffer:", err);
+
+      // Verify that inputBuffer is genuine audio before returning raw fallback
+      let verifiedDuration = 0;
+      let hasAudioStream = false;
+      try {
+        const probe = execSync(
+          `ffprobe -v quiet -print_format json -show_streams -show_format "${tempInput}"`,
+          { encoding: "utf-8", timeout: 5000 }
+        );
+        const probeData = JSON.parse(probe);
+        hasAudioStream = (probeData.streams || []).some((s: any) => s.codec_type === "audio");
+        verifiedDuration = parseFloat(probeData.format?.duration || "0") || 0;
+      } catch {}
+
+      if (!hasAudioStream && verifiedDuration <= 0) {
+        throw new Error("El archivo no contiene pistas de audio válidas (posible página web o archivo corrupto)");
+      }
+
+      return {
+        buffer: inputBuffer,
+        filename: originalFilename.toLowerCase().endsWith(".mp3")
+          ? originalFilename
+          : `${originalFilename.replace(/\.[^/.]+$/, "")}.mp3`,
+        duration: verifiedDuration,
+        mimeType: "audio/mpeg",
+        wasConverted: false,
+        savingsPercent: 0,
+      };
+    } finally {
+      try {
+        if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
+      } catch {}
+      try {
+        if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput);
+      } catch {}
+    }
+  }
+
+  // 1. Upload & Convert MP3 into Public URL (High-speed binary stream and Base64 fallback)
+  app.post("/api/audio/upload", async (req, res) => {
+    try {
+      let buffer: Buffer;
+      let filename = "audio.mp3";
+      let mimeType = "audio/mpeg";
+      let clientDuration = 0;
+      let shouldOptimize = false;
+
+      const contentType = req.headers["content-type"] || "";
+
+      if (contentType.includes("application/octet-stream")) {
+        // High-speed binary stream upload: zero Base64 conversion overhead
+        buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
+
+        const headerFilename = req.headers["x-audio-filename"];
+        if (headerFilename && typeof headerFilename === "string") {
+          try {
+            filename = decodeURIComponent(headerFilename);
+          } catch {
+            filename = headerFilename;
+          }
+        }
+
+        const headerMime = req.headers["x-audio-mime"];
+        if (headerMime && typeof headerMime === "string") {
+          mimeType = headerMime;
+        }
+
+        const headerDuration = req.headers["x-audio-duration"];
+        if (headerDuration) {
+          const parsedDuration = parseFloat(String(headerDuration));
+          if (!isNaN(parsedDuration) && parsedDuration > 0) {
+            clientDuration = parsedDuration;
+          }
+        }
+
+        shouldOptimize = req.headers["x-audio-optimize"] === "true";
+      } else {
+        // Fallback: JSON body with base64
+        const body = req.body || {};
+        const base64Data = body.base64Data;
+        filename = body.filename || filename;
+        mimeType = body.mimeType || mimeType;
+        clientDuration = body.duration || clientDuration;
+        shouldOptimize = !!body.optimize;
+
+        if (!base64Data || typeof base64Data !== "string") {
+          return res.status(400).json({ error: "Missing audio payload (expected raw binary stream or base64Data)" });
+        }
+
+        const cleanBase64 = base64Data.replace(/^data:[^;]+;base64,/, "");
+        buffer = Buffer.from(cleanBase64, "base64");
+      }
+
+      if (!buffer || buffer.length === 0) {
+        return res.status(400).json({ error: "Empty audio buffer" });
+      }
+
+      const originalSize = buffer.length;
+
+      // Server-side audio processing & standardization with ffmpeg
+      const proc = processAudioWithFfmpeg(buffer, filename, { optimize: shouldOptimize });
+      const finalBuffer = proc.buffer;
+      const finalDuration = proc.duration || clientDuration || 0;
+      const finalName = proc.filename;
+
+      const id = `mp3_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
+      const sanitizedFilename = finalName.replace(/[^a-zA-Z0-9_.-]/g, "_");
+      const diskFilename = `${id}_${sanitizedFilename}`;
+      const filePath = path.join(AUDIO_DIR, diskFilename);
+
+      fs.writeFileSync(filePath, finalBuffer);
+
+      const record: AudioRecord = {
+        id,
+        filename: finalName,
+        sanitizedFilename,
+        size: finalBuffer.length,
+        mimeType: proc.mimeType || "audio/mpeg",
+        duration: finalDuration,
+        createdAt: new Date().toISOString(),
+      };
+
+      const records = getAudioRecords();
+      records.unshift(record);
+      saveAudioRecords(records);
+
+      const relativeUrl = `/api/audio/file/${id}/${encodeURIComponent(sanitizedFilename)}`;
+
+      return res.json({
+        success: true,
+        id,
+        filename: record.filename,
+        size: record.size,
+        originalSize,
+        mimeType: record.mimeType,
+        duration: record.duration,
+        url: relativeUrl,
+        createdAt: record.createdAt,
+        wasConverted: proc.wasConverted,
+        savingsPercent: proc.savingsPercent,
+      });
+    } catch (err: any) {
+      console.error("Error uploading MP3:", err);
+      return res.status(500).json({ error: err?.message || "Failed to process audio" });
+    }
+  });
+
+  // 1b. Parallel Multi-Chunk Upload: Accelerates mobile 4G/LTE uploads up to 3x-5x
+  const CHUNK_UPLOAD_DIR = path.join(process.cwd(), "data", "chunks");
+  if (!fs.existsSync(CHUNK_UPLOAD_DIR)) {
+    fs.mkdirSync(CHUNK_UPLOAD_DIR, { recursive: true });
+  }
+
+  app.post("/api/audio/upload-chunk", async (req, res) => {
+    try {
+      const uploadId = (req.headers["x-upload-id"] as string || "").replace(/[^a-zA-Z0-9_-]/g, "");
+      const chunkIndex = parseInt(req.headers["x-chunk-index"] as string, 10);
+      const totalChunks = parseInt(req.headers["x-total-chunks"] as string, 10);
+      const headerFilename = req.headers["x-audio-filename"] as string;
+      const shouldOptimize = req.headers["x-audio-optimize"] === "true";
+
+      if (!uploadId || isNaN(chunkIndex) || isNaN(totalChunks)) {
+        return res.status(400).json({ error: "Missing chunk metadata headers (x-upload-id, x-chunk-index, x-total-chunks)" });
+      }
+
+      const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
+      if (!buffer || buffer.length === 0) {
+        return res.status(400).json({ error: "Empty chunk buffer" });
+      }
+
+      const uploadFolder = path.join(CHUNK_UPLOAD_DIR, uploadId);
+      if (!fs.existsSync(uploadFolder)) {
+        fs.mkdirSync(uploadFolder, { recursive: true });
+      }
+
+      const chunkPath = path.join(uploadFolder, `chunk_${chunkIndex}.part`);
+      fs.writeFileSync(chunkPath, buffer);
+
+      // Check how many chunks have arrived
+      const uploadedParts = fs.readdirSync(uploadFolder).filter(f => f.startsWith("chunk_") && f.endsWith(".part"));
+
+      if (uploadedParts.length === totalChunks) {
+        // All parallel chunks have arrived! Assemble full audio buffer
+        let filename = "audio.mp3";
+        if (headerFilename) {
+          try {
+            filename = decodeURIComponent(headerFilename);
+          } catch {
+            filename = headerFilename;
+          }
+        }
+
+        const chunkBuffers: Buffer[] = [];
+        for (let i = 0; i < totalChunks; i++) {
+          const p = path.join(uploadFolder, `chunk_${i}.part`);
+          if (!fs.existsSync(p)) {
+            return res.status(400).json({ error: `Missing chunk ${i}` });
+          }
+          chunkBuffers.push(fs.readFileSync(p));
+        }
+
+        const fullBuffer = Buffer.concat(chunkBuffers);
+        const originalSize = fullBuffer.length;
+
+        // Clean up chunk files immediately
+        try {
+          for (let i = 0; i < totalChunks; i++) {
+            const p = path.join(uploadFolder, `chunk_${i}.part`);
+            if (fs.existsSync(p)) fs.unlinkSync(p);
+          }
+          fs.rmdirSync(uploadFolder);
+        } catch (e) {
+          console.warn("Chunk cleanup warning:", e);
+        }
+
+        // Server-side audio processing & standardization with ffmpeg
+        const proc = processAudioWithFfmpeg(fullBuffer, filename, { optimize: shouldOptimize });
+        const finalBuffer = proc.buffer;
+        const finalDuration = proc.duration || 0;
+        const finalName = proc.filename;
+
+        const id = `mp3_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
+        const sanitizedFilename = finalName.replace(/[^a-zA-Z0-9_.-]/g, "_");
+        const diskFilename = `${id}_${sanitizedFilename}`;
+        const filePath = path.join(AUDIO_DIR, diskFilename);
+
+        fs.writeFileSync(filePath, finalBuffer);
+
+        const record: AudioRecord = {
+          id,
+          filename: finalName,
+          sanitizedFilename,
+          size: finalBuffer.length,
+          mimeType: proc.mimeType || "audio/mpeg",
+          duration: finalDuration,
+          createdAt: new Date().toISOString(),
+        };
+
+        const records = getAudioRecords();
+        records.unshift(record);
+        saveAudioRecords(records);
+
+        const relativeUrl = `/api/audio/file/${id}/${encodeURIComponent(sanitizedFilename)}`;
+
+        return res.json({
+          complete: true,
+          success: true,
+          id,
+          filename: record.filename,
+          size: record.size,
+          originalSize,
+          mimeType: record.mimeType,
+          duration: record.duration,
+          url: relativeUrl,
+          createdAt: record.createdAt,
+          wasConverted: proc.wasConverted,
+          savingsPercent: proc.savingsPercent,
+        });
+      }
+
+      // Chunk successfully received, awaiting remaining parts
+      return res.json({
+        complete: false,
+        chunkIndex,
+        received: uploadedParts.length,
+        total: totalChunks,
+      });
+    } catch (err: any) {
+      console.error("Chunk upload error:", err);
+      return res.status(500).json({ error: err?.message || "Failed to process audio chunk" });
+    }
+  });
+
+  // Helper: detect if a URL belongs to YouTube
+  function isYouTubeUrl(urlStr: string): boolean {
+    try {
+      const parsed = new URL(urlStr);
+      const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
+      return (
+        host === "youtube.com" ||
+        host === "m.youtube.com" ||
+        host === "youtu.be" ||
+        host === "music.youtube.com"
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  // Helper: Extract audio from YouTube and convert to MP3
+  async function extractYouTubeAudio(
+    youtubeUrl: string
+  ): Promise<{ buffer: Buffer; filename: string; duration?: number }> {
+    const initUrl = `https://loader.to/ajax/download.php?format=mp3&url=${encodeURIComponent(youtubeUrl)}`;
+    const initRes = await fetch(initUrl, {
+      signal: AbortSignal.timeout(15000),
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      },
+    });
+
+    if (!initRes.ok) {
+      throw new Error("El servicio de descarga de YouTube no respondió (HTTP " + initRes.status + ")");
+    }
+
+    const initData: any = await initRes.json();
+    if (!initData.success || !initData.progress_url) {
+      throw new Error(initData.text || "No se pudo iniciar la extracción del video de YouTube.");
+    }
+
+    const rawTitle = (initData.title || "audio_youtube").replace(/[/\\?%*:|"<>]/g, "_").trim();
+    const progressUrl = initData.progress_url;
+    let downloadUrl: string | null = null;
+    let videoDuration: number = initData.video_duration || 0;
+
+    // Poll progress until conversion completes
+    for (let i = 0; i < 24; i++) {
+      await new Promise((r) => setTimeout(r, 1200));
+      try {
+        const pRes = await fetch(progressUrl, {
+          signal: AbortSignal.timeout(8000),
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          },
+        });
+        if (pRes.ok) {
+          const pData: any = await pRes.json();
+          if (pData.success === 1 && pData.download_url) {
+            downloadUrl = pData.download_url;
+            if (pData.video_duration) videoDuration = pData.video_duration;
+            break;
+          } else if (pData.success === -1 || pData.text?.toLowerCase().includes("error")) {
+            throw new Error(pData.text || "Fallo en la conversión de audio de YouTube");
+          }
+        }
+      } catch (err: any) {
+        if (err.message && err.message.includes("Fallo en la conversión")) throw err;
+      }
+    }
+
+    if (!downloadUrl) {
+      throw new Error("El video de YouTube tardó demasiado en procesarse. Por favor intenta de nuevo.");
+    }
+
+    const audioRes = await fetch(downloadUrl, {
+      signal: AbortSignal.timeout(35000),
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      },
+    });
+
+    if (!audioRes.ok) {
+      throw new Error("No se pudo descargar el MP3 generado del video de YouTube.");
+    }
+
+    const arrayBuf = await audioRes.arrayBuffer();
+    const buffer = Buffer.from(arrayBuf);
+
+    return {
+      buffer,
+      filename: rawTitle.endsWith(".mp3") ? rawTitle : `${rawTitle}.mp3`,
+      duration: videoDuration,
+    };
+  }
+
+  // 1b. Convert remote audio URL (or YouTube) into local direct streaming MP3 URL
+  app.post("/api/audio/import-url", async (req, res) => {
+    try {
+      const { url: remoteUrl, customName } = req.body;
+      if (!remoteUrl || typeof remoteUrl !== "string") {
+        return res.status(400).json({ error: "Se requiere una URL de audio válida" });
+      }
+
+      let buffer: Buffer;
+      let filename: string;
+      let estimatedDuration: number | undefined;
+
+      // Special handling for YouTube URLs (videos, music, shorts)
+      if (isYouTubeUrl(remoteUrl)) {
+        const yt = await extractYouTubeAudio(remoteUrl);
+        buffer = yt.buffer;
+        filename = customName
+          ? (customName.endsWith(".mp3") ? customName : `${customName}.mp3`)
+          : yt.filename;
+        estimatedDuration = yt.duration;
+      } else {
+        const parsedUrl = new URL(remoteUrl);
+        const urlPath = parsedUrl.pathname;
+        const derivedName = customName || path.basename(urlPath) || "audio_remoto.mp3";
+        filename = derivedName.endsWith(".mp3") ? derivedName : `${derivedName}.mp3`;
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+        const fetchRes = await fetch(remoteUrl, {
+          signal: controller.signal,
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AikoTools-Audio-Converter/1.0",
+          },
+        });
+        clearTimeout(timeoutId);
+
+        if (!fetchRes.ok) {
+          return res.status(400).json({
+            error: `No se pudo descargar el audio desde la URL (HTTP ${fetchRes.status})`,
+          });
+        }
+
+        const contentType = (fetchRes.headers.get("content-type") || "").toLowerCase();
+        if (contentType.includes("text/html")) {
+          return res.status(400).json({
+            error:
+              "La URL proporcionada es una página web (HTML) y no un archivo de audio directo. Para archivos alojados, usa un enlace directo (.mp3, .wav, .m4a), Google Drive, Dropbox, o un enlace de YouTube.",
+          });
+        }
+
+        const arrayBuffer = await fetchRes.arrayBuffer();
+        buffer = Buffer.from(arrayBuffer);
+      }
+
+      if (buffer.length < 500) {
+        return res.status(400).json({
+          error: "El archivo descargado no parece ser un audio válido o está vacío",
+        });
+      }
+
+      const proc = processAudioWithFfmpeg(buffer, filename, { optimize: false });
+      const finalBuffer = proc.buffer;
+      const finalName = proc.filename;
+      let duration = proc.duration || 0;
+
+      if (duration <= 0 && estimatedDuration && estimatedDuration > 0) {
+        duration = estimatedDuration;
+      }
+
+      if (duration <= 0) {
+        return res.status(400).json({
+          error: "El archivo obtenido no contiene audio reproducible (duración 00:00).",
+        });
+      }
+
+      const id = `mp3_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
+      const sanitizedFilename = finalName.replace(/[^a-zA-Z0-9_.-]/g, "_");
+      const diskFilename = `${id}_${sanitizedFilename}`;
+      const filePath = path.join(AUDIO_DIR, diskFilename);
+
+      fs.writeFileSync(filePath, finalBuffer);
+
+      const mimeType = proc.mimeType || "audio/mpeg";
+      const record: AudioRecord = {
+        id,
+        filename: finalName,
+        sanitizedFilename,
+        size: finalBuffer.length,
+        mimeType,
+        duration,
+        createdAt: new Date().toISOString(),
+      };
+
+      const records = getAudioRecords();
+      records.unshift(record);
+      saveAudioRecords(records);
+
+      const relativeUrl = `/api/audio/file/${id}/${encodeURIComponent(sanitizedFilename)}`;
+
+      return res.json({
+        success: true,
+        id,
+        filename: record.filename,
+        size: record.size,
+        mimeType: record.mimeType,
+        duration: record.duration,
+        url: relativeUrl,
+        createdAt: record.createdAt,
+      });
+    } catch (err: any) {
+      console.error("Error importing audio URL:", err);
+      return res.status(500).json({
+        error: err?.message || "Error al importar el audio desde la URL",
+      });
+    }
+  });
+
+  // 1c. Rename Audio File
+  app.patch("/api/audio/rename/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      const { newName } = req.body;
+      if (!newName || typeof newName !== "string") {
+        return res.status(400).json({ error: "Nuevo nombre no proporcionado" });
+      }
+
+      const cleanedName = newName.trim();
+      const finalFilename = cleanedName.endsWith(".mp3") ? cleanedName : `${cleanedName}.mp3`;
+      const sanitized = finalFilename.replace(/[^a-zA-Z0-9_.-]/g, "_");
+
+      const records = getAudioRecords();
+      const recordIndex = records.findIndex((r) => r.id === id);
+      if (recordIndex === -1) {
+        return res.status(404).json({ error: "Archivo de audio no encontrado" });
+      }
+
+      const currentRecord = records[recordIndex];
+      const oldDiskPath = path.join(AUDIO_DIR, `${currentRecord.id}_${currentRecord.sanitizedFilename}`);
+      const newDiskPath = path.join(AUDIO_DIR, `${currentRecord.id}_${sanitized}`);
+
+      if (fs.existsSync(oldDiskPath) && oldDiskPath !== newDiskPath) {
+        fs.renameSync(oldDiskPath, newDiskPath);
+      }
+
+      currentRecord.filename = finalFilename;
+      currentRecord.sanitizedFilename = sanitized;
+      records[recordIndex] = currentRecord;
+      saveAudioRecords(records);
+
+      const newRelativeUrl = `/api/audio/file/${id}/${encodeURIComponent(sanitized)}`;
+
+      return res.json({
+        success: true,
+        id,
+        filename: finalFilename,
+        url: newRelativeUrl
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || "Error al renombrar archivo" });
+    }
+  });
+
+  // 2. Stream Audio with HTTP Range Support (Status 206 Partial Content / 200 OK)
+  app.all(["/api/audio/file/:id", "/api/audio/file/:id/:filename"], (req, res) => {
+    const { id } = req.params;
+    const records = getAudioRecords();
+    const record = records.find((r) => r.id === id);
+
+    // Locate file on disk
+    let targetFilePath: string | null = null;
+    let actualMime = record?.mimeType || "audio/mpeg";
+    let actualFilename = record?.sanitizedFilename || "audio.mp3";
+
+    if (record) {
+      const p = path.join(AUDIO_DIR, `${record.id}_${record.sanitizedFilename}`);
+      if (fs.existsSync(p)) {
+        targetFilePath = p;
+      }
+    }
+
+    if (!targetFilePath) {
+      // Fallback search in folder by ID prefix
+      try {
+        const files = fs.readdirSync(AUDIO_DIR);
+        const match = files.find((f) => f.startsWith(`${id}_`));
+        if (match) {
+          targetFilePath = path.join(AUDIO_DIR, match);
+          actualFilename = match.replace(`${id}_`, "");
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    if (!targetFilePath || !fs.existsSync(targetFilePath)) {
+      return res.status(404).json({ error: "Audio file not found" });
+    }
+
+    const stat = fs.statSync(targetFilePath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+
+    // CORS & Browser Headers for direct external playback
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Range, Origin, X-Requested-With, Content-Type, Accept");
+    res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges");
+
+    if (req.method === "OPTIONS") {
+      return res.sendStatus(204);
+    }
+
+    if (range) {
+      // Range Header Parsing
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+      if (start >= fileSize || end >= fileSize) {
+        res.setHeader("Content-Range", `bytes */${fileSize}`);
+        return res.status(416).end();
+      }
+
+      const chunkSize = end - start + 1;
+      res.writeHead(206, {
+        "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+        "Accept-Ranges": "bytes",
+        "Content-Length": chunkSize,
+        "Content-Type": actualMime,
+        "Cache-Control": "public, max-age=86400",
+      });
+
+      if (req.method === "HEAD") {
+        return res.end();
+      }
+
+      const stream = fs.createReadStream(targetFilePath, { start, end });
+      stream.pipe(res);
+    } else {
+      res.writeHead(200, {
+        "Content-Length": fileSize,
+        "Content-Type": actualMime,
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "public, max-age=86400",
+        "Content-Disposition": `inline; filename="${actualFilename}"`,
+      });
+
+      if (req.method === "HEAD") {
+        return res.end();
+      }
+
+      const stream = fs.createReadStream(targetFilePath);
+      stream.pipe(res);
+    }
+  });
+
+  // 3. List Stored Audio Files
+  app.get("/api/audio/list", (req, res) => {
+    const records = getAudioRecords();
+    const verified = records.filter((r) => {
+      const p = path.join(AUDIO_DIR, `${r.id}_${r.sanitizedFilename}`);
+      return fs.existsSync(p);
+    }).map((r) => ({
+      ...r,
+      url: `/api/audio/file/${r.id}/${encodeURIComponent(r.sanitizedFilename)}`,
+    }));
+    res.json({ files: verified });
+  });
+
+  // 4. Delete Audio File
+  app.delete("/api/audio/file/:id", (req, res) => {
+    const { id } = req.params;
+    let records = getAudioRecords();
+    const record = records.find((r) => r.id === id);
+
+    if (record) {
+      const p = path.join(AUDIO_DIR, `${record.id}_${record.sanitizedFilename}`);
+      if (fs.existsSync(p)) {
+        try {
+          fs.unlinkSync(p);
+        } catch (e) {
+          console.warn("Failed to delete audio file from disk:", e);
+        }
+      }
+      records = records.filter((r) => r.id !== id);
+      saveAudioRecords(records);
+    }
+    res.json({ success: true, id });
   });
 
   // Dedicated AI Image Generation Endpoint

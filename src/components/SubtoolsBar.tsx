@@ -12,7 +12,8 @@ import {
   Film,
   Radio,
   Layers,
-  Search
+  Search,
+  PenTool
 } from 'lucide-react';
 import { SUBTOOLS_NAV_ITEMS } from '../data/tools';
 import { ToolDefinition } from '../types';
@@ -36,6 +37,7 @@ export const SubtoolsBar: React.FC<SubtoolsBarProps> = ({
     switch (itemId) {
       case 'ai-image-gen': return <Sparkles className={iconClass} />;
       case 'bg-remover': return <Eraser className={iconClass} />;
+      case 'lineart-nav': return <PenTool className={iconClass} />;
       case 'recolor': return <Pipette className={iconClass} />;
       case 'converter': return <RefreshCw className={iconClass} />;
       case 'effects': return <Wand2 className={iconClass} />;

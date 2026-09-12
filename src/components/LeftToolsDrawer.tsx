@@ -32,7 +32,8 @@ import {
   Clapperboard,
   Radio,
   Volume2,
-  Split
+  Split,
+  PenTool
 } from 'lucide-react';
 import { AikoHamsterLogo } from './AikoHamsterLogo';
 import { useLanguage } from '../context/LanguageContext';
@@ -87,6 +88,7 @@ export const LeftToolsDrawer: React.FC<LeftToolsDrawerProps> = ({
 
     if (toolId === 'ai-image-generator') return <Sparkles className={iconClass} />;
     if (toolId === 'bg-remover') return <Eraser className={iconClass} />;
+    if (toolId === 'lineart-tools') return <PenTool className={iconClass} />;
     if (toolId === 'recolor-tools') return <Pipette className={iconClass} />;
     if (toolId === 'converter-tools') return <RefreshCw className={iconClass} />;
     if (toolId === 'effects-tools') return <Wand2 className={iconClass} />;

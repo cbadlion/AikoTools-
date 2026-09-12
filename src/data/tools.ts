@@ -47,6 +47,21 @@ export const TOOLS: ToolDefinition[] = [
     subtools: ['Pipeta selectiva', 'Rueda de tono 360°', 'Duotono y tinte', 'Canales RGB', 'Preservar sombras']
   },
   {
+    id: 'lineart-tools',
+    name: 'Extraer Lineart Transparente',
+    subtitle: 'Dibuja el lineart y contornos en PNG con transparencia pura.',
+    description: 'Transforma fotos, ilustraciones, anime o bocetos en trazos limpios de lineart sobre fondo transparente PNG. Ajusta grosor, sensibilidad, estilo manga o boceto, y color de tinta.',
+    category: 'lineart',
+    iconName: 'PenTool',
+    acceptedMime: 'image/*',
+    status: 'DISPONIBLE',
+    isAvailable: true,
+    accentHex: '#EC4899',
+    gradient: 'from-pink-500 via-rose-500 to-purple-600',
+    iconBg: 'bg-pink-950/40 text-pink-400 border-pink-500/30',
+    subtools: ['Lineart Transparente', 'Manga & Anime', 'Boceto a Lápiz', 'Tinta China', 'Trazos en Color']
+  },
+  {
     id: 'converter-tools',
     name: 'Conversor Universal',
     subtitle: 'Convierte entre JPG, PNG, WebP, AVIF, BMP, ICO y GIF.',
@@ -150,6 +165,21 @@ export const TOOLS: ToolDefinition[] = [
     gradient: 'from-teal-600 via-emerald-600 to-cyan-600',
     iconBg: 'bg-teal-950/40 text-teal-400 border-teal-500/30',
     subtools: ['Extraer audio WAV', 'Silenciar vídeo', 'Añadir música']
+  },
+  {
+    id: 'mp3-to-url',
+    name: 'Convertidor MP3 a URL',
+    subtitle: 'Convierte audio a enlaces públicos, Data URI y reproductor.',
+    description: 'Genera URLs públicas directas, enlaces HTTPS, códigos embed HTML5 y QR listos para bots de Discord, Roblox, webs y OBS.',
+    category: 'audio',
+    iconName: 'Music',
+    acceptedMime: 'audio/*',
+    status: 'DISPONIBLE',
+    isAvailable: true,
+    accentHex: '#38BDF8',
+    gradient: 'from-sky-500 via-cyan-500 to-indigo-600',
+    iconBg: 'bg-sky-950/40 text-sky-400 border-sky-500/30',
+    subtools: ['URL Pública Directa', 'Embed HTML5', 'Código QR', 'Grabador de voz', 'Data URL']
   },
   {
     id: 'transform-tools',
@@ -383,6 +413,7 @@ export const CATEGORY_PILLS: { id: ToolCategory; label: string; icon?: string; a
   { id: 'ai-generator', label: 'Generador IA ✨', accentColor: '#EF4444', activeGradient: 'from-red-600 to-amber-600' },
   { id: 'bg-remover', label: 'Eliminar Fondo', accentColor: '#DC2626', activeGradient: 'from-red-600 to-rose-600' },
   { id: 'recolor', label: 'Cambiar Color 🎨', accentColor: '#06B6D4', activeGradient: 'from-cyan-600 to-teal-600' },
+  { id: 'lineart', label: 'Lineart PNG ✒️', accentColor: '#EC4899', activeGradient: 'from-pink-600 to-purple-600' },
   { id: 'converter', label: 'Conversor', accentColor: '#10B981', activeGradient: 'from-emerald-600 to-teal-600' },
   { id: 'effects', label: 'Filtros', accentColor: '#F43F5E', activeGradient: 'from-rose-600 to-red-600' },
   { id: 'palette', label: 'Paleta Color', accentColor: '#F59E0B', activeGradient: 'from-amber-600 to-orange-600' },
@@ -406,6 +437,7 @@ export const SUBTOOLS_NAV_ITEMS = [
   { id: 'enhance-quick', label: 'Mejorar Calidad ✨', targetToolId: 'enhance-tools' as const, color: '#F59E0B' },
   { id: 'smooth-quick', label: 'Fluidez 60 FPS ⚡', targetToolId: 'smooth-tools' as const, color: '#06B6D4' },
   { id: 'bg-remover', label: 'Eliminar Fondo', targetToolId: 'bg-remover' as const, color: '#DC2626' },
+  { id: 'lineart-nav', label: 'Lineart PNG ✒️', targetToolId: 'lineart-tools' as const, color: '#EC4899' },
   { id: 'recolor', label: 'Cambiar Color', targetToolId: 'recolor-tools' as const, color: '#06B6D4' },
   { id: 'converter', label: 'Conversor Universal', targetToolId: 'converter-tools' as const, color: '#10B981' },
   { id: 'effects', label: 'Filtros & FX', targetToolId: 'effects-tools' as const, color: '#F43F5E' },
@@ -418,6 +450,7 @@ export const SUBTOOLS_NAV_ITEMS = [
   { id: 'gif-to-mp4', label: 'GIF a MP4', targetToolId: 'video-tools' as const, color: '#B91C1C' },
   { id: 'webp-to-gif', label: 'WebP a GIF', targetToolId: 'webp-tools' as const, color: '#0284C7' },
   { id: 'batch-webp-nav', label: 'Lote a WebP 🗂️', targetToolId: 'batch-webp' as const, color: '#0EA5E9' },
+  { id: 'mp3-to-url-nav', label: 'MP3 a URL 🎵', targetToolId: 'mp3-to-url' as const, color: '#38BDF8' },
   { id: 'svg-to-gif', label: 'SVG a Raster', targetToolId: 'svg-tools' as const, color: '#65A30D' },
   { id: 'gif-analyzer', label: 'Analizador GIF', targetToolId: 'analyzer-tools' as const, color: '#DC2626' }
 ];

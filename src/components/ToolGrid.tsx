@@ -31,7 +31,8 @@ import {
   Volume2,
   Bot,
   ArrowUpRight,
-  Split
+  Split,
+  PenTool
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -55,12 +56,13 @@ export const ToolGrid: React.FC<ToolGridProps> = ({
     
     if (toolId === 'ai-image-generator') return <Sparkles className={iconClass} />;
     if (toolId === 'bg-remover') return <Eraser className={iconClass} />;
+    if (toolId === 'lineart-tools') return <PenTool className={iconClass} />;
     if (toolId === 'recolor-tools') return <Pipette className={iconClass} />;
     if (toolId === 'converter-tools') return <RefreshCw className={iconClass} />;
     if (toolId === 'effects-tools') return <Wand2 className={iconClass} />;
     if (toolId === 'gif-maker') return <Clapperboard className={iconClass} />;
     if (toolId === 'video-tools') return <Film className={iconClass} />;
-    if (toolId === 'audio-tools') return <Music className={iconClass} />;
+    if (toolId === 'audio-tools' || toolId === 'mp3-to-url') return <Music className={iconClass} />;
     if (toolId === 'transform-tools') return <Crop className={iconClass} />;
     if (toolId === 'optimize-tools') return <Gauge className={iconClass} />;
     if (toolId === 'watermark-tools') return <ShieldAlert className={iconClass} />;

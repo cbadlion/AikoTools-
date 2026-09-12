@@ -47,6 +47,12 @@ import {
   stripMediaMetadata,
   ExifMetadata
 } from '../utils/mediaEngine';
+import {
+  LineartStyle,
+  LineartOptions,
+  extractLineartImage,
+  applyLineartToImageData
+} from '../utils/lineartEngine';
 import { saveToHistory } from '../utils/historyStorage';
 import { notifyUser } from '../utils/notifications';
 import {
@@ -100,7 +106,9 @@ import {
   Camera,
   ExternalLink,
   ZoomIn,
-  ZoomOut
+  ZoomOut,
+  PenTool,
+  Brush
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { useLanguage } from '../context/LanguageContext';
@@ -172,6 +180,22 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
   const [recolorLivePreviewUrl, setRecolorLivePreviewUrl] = useState<string | null>(null);
   const [showOriginalComparison, setShowOriginalComparison] = useState<boolean>(false);
   const [isRecolorPreviewUpdating, setIsRecolorPreviewUpdating] = useState<boolean>(false);
+
+  // Lineart Tools options (Dibuja el lineart transparente)
+  const [lineartStyle, setLineartStyle] = useState<LineartStyle>('anime_pro');
+  const [lineartColor, setLineartColor] = useState<string>('#000000');
+  const [lineartThickness, setLineartThickness] = useState<number>(1.5);
+  const [lineartSensitivity, setLineartSensitivity] = useState<number>(55);
+  const [lineartNoiseReduction, setLineartNoiseReduction] = useState<number>(25);
+  const [lineartSurfaceBlur, setLineartSurfaceBlur] = useState<number>(2);
+  const [lineartRemoveSpeckles, setLineartRemoveSpeckles] = useState<boolean>(true);
+  const [lineartSmoothness, setLineartSmoothness] = useState<number>(1);
+  const [lineartOpacity, setLineartOpacity] = useState<number>(100);
+  const [lineartInvert, setLineartInvert] = useState<boolean>(false);
+  const [lineartBgPreview, setLineartBgPreview] = useState<'transparent' | 'dark' | 'white' | 'original'>('transparent');
+  const [lineartLivePreviewUrl, setLineartLivePreviewUrl] = useState<string | null>(null);
+  const [isLineartUpdating, setIsLineartUpdating] = useState<boolean>(false);
+  const [lineartCopied, setLineartCopied] = useState<boolean>(false);
 
   // Universal Converter options
   const [universalTarget, setUniversalTarget] = useState<'png' | 'jpg' | 'webp' | 'avif' | 'bmp' | 'ico' | 'gif' | 'pdf' | 'svg'>('webp');
@@ -599,6 +623,126 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
     recolorTintBalance
   ]);
 
+  // Live Lineart Preview Generator (Dibuja automáticamente el lineart transparente)
+  useEffect(() => {
+    if (tool.id !== 'lineart-tools' || !fileInfo?.previewUrl) {
+      return;
+    }
+
+    let isCancelled = false;
+    setIsLineartUpdating(true);
+
+    const timer = setTimeout(() => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.src = fileInfo.previewUrl;
+
+      const generateLiveLineart = () => {
+        if (isCancelled || !img.naturalWidth || !img.naturalHeight) {
+          setIsLineartUpdating(false);
+          return;
+        }
+
+        try {
+          // Preview resolution (max 800px for instant smooth drawing)
+          const scale = Math.min(1, 800 / Math.max(img.naturalWidth, img.naturalHeight));
+          const w = Math.max(1, Math.round(img.naturalWidth * scale));
+          const h = Math.max(1, Math.round(img.naturalHeight * scale));
+
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          if (!ctx) {
+            setIsLineartUpdating(false);
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, w, h);
+          const srcData = ctx.getImageData(0, 0, w, h);
+          const dstData = ctx.createImageData(w, h);
+
+          applyLineartToImageData(srcData, dstData, w, h, {
+            style: lineartStyle,
+            lineColor: lineartColor,
+            thickness: lineartThickness,
+            sensitivity: lineartSensitivity,
+            noiseReduction: lineartNoiseReduction,
+            smoothness: lineartSmoothness,
+            lineOpacity: lineartOpacity,
+            surfaceBlur: lineartSurfaceBlur,
+            removeSpeckles: lineartRemoveSpeckles,
+            invert: lineartInvert
+          });
+
+          ctx.putImageData(dstData, 0, 0);
+
+          canvas.toBlob((blob) => {
+            if (isCancelled || !blob) {
+              setIsLineartUpdating(false);
+              return;
+            }
+            const url = URL.createObjectURL(blob);
+            setLineartLivePreviewUrl((prev) => {
+              if (prev) URL.revokeObjectURL(prev);
+              return url;
+            });
+            setIsLineartUpdating(false);
+          }, 'image/png');
+        } catch (e) {
+          console.warn('Live lineart preview generation failed:', e);
+          setIsLineartUpdating(false);
+        }
+      };
+
+      if (img.complete) {
+        generateLiveLineart();
+      } else {
+        img.onload = generateLiveLineart;
+        img.onerror = () => setIsLineartUpdating(false);
+      }
+    }, 40);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
+  }, [
+    tool.id,
+    fileInfo?.previewUrl,
+    lineartStyle,
+    lineartColor,
+    lineartThickness,
+    lineartSensitivity,
+    lineartNoiseReduction,
+    lineartSurfaceBlur,
+    lineartRemoveSpeckles,
+    lineartSmoothness,
+    lineartOpacity,
+    lineartInvert
+  ]);
+
+  const handleCopyLineartPng = async () => {
+    try {
+      const urlToCopy = result?.url || lineartLivePreviewUrl;
+      if (!urlToCopy) return;
+      const res = await fetch(urlToCopy);
+      const blob = await res.blob();
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ]);
+      setLineartCopied(true);
+      notifyUser({
+        title: 'Copiado al Portapapeles',
+        body: 'El lineart PNG con transparencia pura se copió correctamente.',
+        type: 'success'
+      });
+      setTimeout(() => setLineartCopied(false), 2000);
+    } catch (e) {
+      console.warn('Could not copy lineart to clipboard:', e);
+    }
+  };
+
   const isVideo = fileInfo.type.startsWith('video/');
   const isGif = fileInfo.type.includes('gif') || fileInfo.name.toLowerCase().endsWith('.gif');
 
@@ -857,6 +1001,24 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
           tintBalance: recolorTintBalance,
           outputFormat: outFormat as any,
           preserveAnimation,
+          onProgress: (p) => setProcessProgress(p)
+        });
+      }
+      // 1C. LINEART TOOLS (DIBUJA LINEART EN PNG TRANSPARENTE)
+      else if (tool.id === 'lineart-tools') {
+        const outFormat = selectedOutputFormat === 'webp' ? 'webp' : 'png';
+        res = await extractLineartImage(fileInfo.file, {
+          style: lineartStyle,
+          lineColor: lineartColor,
+          thickness: lineartThickness,
+          sensitivity: lineartSensitivity,
+          noiseReduction: lineartNoiseReduction,
+          smoothness: lineartSmoothness,
+          lineOpacity: lineartOpacity,
+          surfaceBlur: lineartSurfaceBlur,
+          removeSpeckles: lineartRemoveSpeckles,
+          invert: lineartInvert,
+          outputFormat: outFormat,
           onProgress: (p) => setProcessProgress(p)
         });
       }
@@ -2308,6 +2470,357 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
                       <p className="text-[9px] text-stone-400 truncate">{fmt.desc}</p>
                     </button>
                   ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================
+              1C. LINEART TOOLS CONTROLS (DIBUJAR LINEART TRANSPARENTE)
+             ========================================================= */}
+          {tool.id === 'lineart-tools' && (
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-pink-950/40 via-[#161a28] to-[#121522] border border-pink-500/40 space-y-2 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <PenTool className="h-4 w-4 text-pink-400" />
+                    <span>Entintador & Lineart Vectorial Transparente Pro</span>
+                  </p>
+                  <span className="px-2 py-0.5 rounded-full bg-pink-500/20 border border-pink-500/50 text-[10px] font-bold text-pink-300">
+                    ALTA PRECISIÓN HD
+                  </span>
+                </div>
+                <p className="text-[11px] text-stone-300 leading-relaxed">
+                  Algoritmo XDoG avanzado con filtrado de superficie para eliminar grano, texturas y manchas residuales, generando trazos limpios y suaves sobre fondo 100% transparente.
+                </p>
+
+                {/* Presets Rápidos */}
+                <div className="pt-1">
+                  <span className="text-[10px] font-bold text-stone-400 block mb-1">
+                    Presets Recomendados con 1 Clic:
+                  </span>
+                  <div className="grid grid-cols-3 gap-1.5 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLineartStyle('anime_pro');
+                        setLineartThickness(1.5);
+                        setLineartSensitivity(55);
+                        setLineartSurfaceBlur(2);
+                        setLineartNoiseReduction(25);
+                        setLineartSmoothness(1);
+                        setLineartRemoveSpeckles(true);
+                      }}
+                      className={`p-1.5 rounded-lg border text-left transition-all ${
+                        lineartStyle === 'anime_pro'
+                          ? 'bg-pink-950/60 border-pink-400 text-pink-200 font-bold'
+                          : 'bg-[#181C2B] border-[#262C3E] text-stone-300 hover:text-white'
+                      }`}
+                    >
+                      <p className="font-bold text-[11px]">🌸 Anime Pro</p>
+                      <p className="text-[9px] text-stone-400">Trazos G-Pen limpios</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLineartStyle('clean_vector');
+                        setLineartThickness(1);
+                        setLineartSensitivity(60);
+                        setLineartSurfaceBlur(2);
+                        setLineartNoiseReduction(35);
+                        setLineartSmoothness(0);
+                        setLineartRemoveSpeckles(true);
+                      }}
+                      className={`p-1.5 rounded-lg border text-left transition-all ${
+                        lineartStyle === 'clean_vector'
+                          ? 'bg-pink-950/60 border-pink-400 text-pink-200 font-bold'
+                          : 'bg-[#181C2B] border-[#262C3E] text-stone-300 hover:text-white'
+                      }`}
+                    >
+                      <p className="font-bold text-[11px]">✒️ Vector Fino</p>
+                      <p className="text-[9px] text-stone-400">Línea continua 1px</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLineartStyle('comic_ink');
+                        setLineartThickness(2.5);
+                        setLineartSensitivity(65);
+                        setLineartSurfaceBlur(3);
+                        setLineartNoiseReduction(30);
+                        setLineartSmoothness(1);
+                        setLineartRemoveSpeckles(true);
+                      }}
+                      className={`p-1.5 rounded-lg border text-left transition-all ${
+                        lineartStyle === 'comic_ink'
+                          ? 'bg-pink-950/60 border-pink-400 text-pink-200 font-bold'
+                          : 'bg-[#181C2B] border-[#262C3E] text-stone-300 hover:text-white'
+                      }`}
+                    >
+                      <p className="font-bold text-[11px]">💥 Cómic Firme</p>
+                      <p className="text-[9px] text-stone-400">Tinta y alto impacto</p>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Estilo de Lineart */}
+              <div>
+                <label className="block text-xs font-semibold text-stone-300 mb-1.5">
+                  Estilo de Trazo y Entintado Artístico
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                  {[
+                    { id: 'anime_pro', label: 'Anime & Manga Pro', desc: 'XDoG suave estilo G-Pen' },
+                    { id: 'clean_vector', label: 'Línea Fina Vectorial', desc: 'Canny continuo sin doble línea' },
+                    { id: 'comic_ink', label: 'Tinta Cómic', desc: 'Contornos gruesos y definidos' },
+                    { id: 'pencil_sketch', label: 'Boceto a Lápiz', desc: 'Grafito suave artístico' },
+                    { id: 'minimalist', label: 'Siluetas & Contorno', desc: 'Solo formas estructurales' },
+                    { id: 'colored_ink', label: 'Líneas a Color', desc: 'Conserva colores originales' }
+                  ].map((style) => (
+                    <button
+                      key={style.id}
+                      type="button"
+                      onClick={() => setLineartStyle(style.id as LineartStyle)}
+                      className={`p-2 rounded-xl text-left border transition-all ${
+                        lineartStyle === style.id ||
+                        (style.id === 'anime_pro' && lineartStyle === 'manga') ||
+                        (style.id === 'comic_ink' && lineartStyle === 'ink') ||
+                        (style.id === 'pencil_sketch' && lineartStyle === 'pencil') ||
+                        (style.id === 'minimalist' && lineartStyle === 'sobel') ||
+                        (style.id === 'colored_ink' && lineartStyle === 'colored')
+                          ? 'bg-pink-950/50 border-pink-500 text-pink-200 font-bold shadow-xs'
+                          : 'bg-[#181C2B] border-[#262C3E] text-stone-300 hover:text-white'
+                      }`}
+                    >
+                      <p className="text-xs font-bold">{style.label}</p>
+                      <p className="text-[9px] text-stone-400 truncate">{style.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Color de la Tinta / Trazo */}
+              {lineartStyle !== 'colored_ink' && lineartStyle !== 'colored' && (
+                <div>
+                  <div className="flex justify-between items-center text-xs text-stone-300 mb-1.5 font-medium">
+                    <span>Color de la Tinta</span>
+                    <span className="font-mono text-pink-300 text-[11px] uppercase">{lineartColor}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[
+                      { hex: '#000000', label: 'Negro Tinta' },
+                      { hex: '#FFFFFF', label: 'Blanco (Impresión tela)' },
+                      { hex: '#1E3A8A', label: 'Azul Boceto' },
+                      { hex: '#991B1B', label: 'Rojo Manga' },
+                      { hex: '#581C87', label: 'Púrpura' },
+                      { hex: '#78350F', label: 'Sepia' }
+                    ].map((preset) => (
+                      <button
+                        key={preset.hex}
+                        type="button"
+                        onClick={() => setLineartColor(preset.hex)}
+                        className={`h-7 px-2.5 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 transition-all ${
+                          lineartColor.toLowerCase() === preset.hex.toLowerCase()
+                            ? 'border-pink-400 bg-pink-950/40 text-white font-bold ring-1 ring-pink-400'
+                            : 'border-[#262C3E] bg-[#181C2B] text-stone-300 hover:text-white'
+                        }`}
+                      >
+                        <span
+                          className="h-3 w-3 rounded-full border border-stone-500 shrink-0"
+                          style={{ backgroundColor: preset.hex }}
+                        />
+                        <span>{preset.label}</span>
+                      </button>
+                    ))}
+
+                    <div className="flex items-center gap-1.5 bg-[#181C2B] border border-[#262C3E] px-2 py-1 rounded-lg">
+                      <span className="text-[10px] text-stone-400">Personalizado:</span>
+                      <input
+                        type="color"
+                        value={lineartColor}
+                        onChange={(e) => setLineartColor(e.target.value)}
+                        className="h-5 w-6 rounded cursor-pointer bg-transparent border-0"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Sliders de Calidad y Acabado de Trazos */}
+              <div className="space-y-3 pt-1">
+                {/* Grosor del trazo */}
+                <div>
+                  <div className="flex justify-between text-xs text-stone-300 mb-1 font-medium">
+                    <span>Grosor del Trazo ({lineartThickness}px)</span>
+                    <span className="text-pink-300 font-mono font-bold text-xs">
+                      {lineartThickness <= 1 ? 'Ultra Fino (1px)' : lineartThickness <= 2 ? 'Equilibrado (Fino)' : lineartThickness <= 3 ? 'Medio' : 'Marcado'}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="6"
+                    step="0.5"
+                    value={lineartThickness}
+                    onChange={(e) => setLineartThickness(Number(e.target.value))}
+                    className="w-full accent-pink-500 cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[9px] text-stone-500 px-0.5">
+                    <span>1px (Fino)</span>
+                    <span>2px (Estándar)</span>
+                    <span>3.5px</span>
+                    <span>6px (Grueso)</span>
+                  </div>
+                </div>
+
+                {/* Filtro Inteligente de Textura / Ruido (Surface Blur) */}
+                <div className="p-2.5 rounded-xl bg-[#141824] border border-[#222736]">
+                  <div className="flex justify-between text-xs text-stone-300 mb-1 font-medium">
+                    <span>Limpieza de Grano y Textura ({lineartSurfaceBlur === 0 ? 'Desactivado' : `${lineartSurfaceBlur}px de filtro`})</span>
+                    <span className="text-pink-300 font-mono font-bold text-xs">
+                      {lineartSurfaceBlur === 0
+                        ? 'Crudo (con ruido)'
+                        : lineartSurfaceBlur <= 2
+                        ? 'Limpio (Recomendado)'
+                        : 'Ultra Suave (Solo bordes grandes)'}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="5"
+                    step="1"
+                    value={lineartSurfaceBlur}
+                    onChange={(e) => setLineartSurfaceBlur(Number(e.target.value))}
+                    className="w-full accent-pink-500 cursor-pointer"
+                  />
+                  <p className="text-[10px] text-stone-400 mt-1">
+                    Elimina pecas, textura de tela, sombras sucias y ruido fotográfico, conservando únicamente las líneas principales nítidas.
+                  </p>
+                </div>
+
+                {/* Sensibilidad / Nivel de detalle */}
+                <div>
+                  <div className="flex justify-between text-xs text-stone-300 mb-1 font-medium">
+                    <span>Sensibilidad a Contornos y Detalles ({lineartSensitivity}%)</span>
+                    <span className="text-pink-300 font-mono font-bold text-xs">
+                      {lineartSensitivity < 40 ? 'Solo siluetas' : lineartSensitivity < 70 ? 'Equilibrado' : 'Máximo detalle'}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="15"
+                    max="90"
+                    value={lineartSensitivity}
+                    onChange={(e) => setLineartSensitivity(Number(e.target.value))}
+                    className="w-full accent-pink-500 cursor-pointer"
+                  />
+                </div>
+
+                {/* Limpieza de Fondo / Transparencia estricta */}
+                <div>
+                  <div className="flex justify-between text-xs text-stone-300 mb-1 font-medium">
+                    <span>Corte de Fondo Transparente ({lineartNoiseReduction}%)</span>
+                    <span className="text-pink-300 font-mono font-bold text-xs">
+                      {lineartNoiseReduction > 30 ? 'Fondo 100% Puro' : 'Suave'}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="65"
+                    value={lineartNoiseReduction}
+                    onChange={(e) => setLineartNoiseReduction(Number(e.target.value))}
+                    className="w-full accent-pink-500 cursor-pointer"
+                  />
+                  <p className="text-[10px] text-stone-400 mt-0.5">
+                    Garantiza que cualquier sombra o degradado débil se convierta en alfa 0% (transparencia total).
+                  </p>
+                </div>
+
+                {/* Suavizado / Anti-Aliasing */}
+                <div>
+                  <div className="flex justify-between text-xs text-stone-300 mb-1 font-medium">
+                    <span>Anti-Aliasing de Trazos ({lineartSmoothness === 0 ? 'Sin anti-alias' : `${lineartSmoothness}px`})</span>
+                    <span className="text-pink-300 font-mono font-bold text-xs">
+                      {lineartSmoothness === 0 ? 'Borde duro' : lineartSmoothness === 1 ? 'Trazo sedoso' : 'Muy difuso'}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="3"
+                    step="1"
+                    value={lineartSmoothness}
+                    onChange={(e) => setLineartSmoothness(Number(e.target.value))}
+                    className="w-full accent-pink-500 cursor-pointer"
+                  />
+                </div>
+
+                {/* Opciones Adicionales: Despeckle & Invertir */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#181C2B] border border-[#262C3E]">
+                    <div>
+                      <p className="text-xs font-bold text-white">Eliminar Motitas Sueltas</p>
+                      <p className="text-[10px] text-stone-400">Borra puntos aislados de ruido</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={lineartRemoveSpeckles}
+                      onChange={(e) => setLineartRemoveSpeckles(e.target.checked)}
+                      className="h-4 w-4 rounded accent-pink-500 cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#181C2B] border border-[#262C3E]">
+                    <div>
+                      <p className="text-xs font-bold text-white">Invertir Detección</p>
+                      <p className="text-[10px] text-stone-400">Líneas claras sobre fondo oscuro</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={lineartInvert}
+                      onChange={(e) => setLineartInvert(e.target.checked)}
+                      className="h-4 w-4 rounded accent-pink-500 cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Formato de archivo de salida */}
+              <div>
+                <label className="block text-xs font-semibold text-stone-300 mb-1.5">
+                  Formato de Salida (Con Canal Alfa Transparente)
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedOutputFormat('png')}
+                    className={`p-2.5 rounded-xl text-left border transition-all ${
+                      selectedOutputFormat === 'png' || selectedOutputFormat === 'auto'
+                        ? 'bg-pink-950/50 border-pink-500 text-pink-200 font-bold shadow-xs'
+                        : 'bg-[#181C2B] border-[#262C3E] text-stone-300 hover:text-white'
+                    }`}
+                  >
+                    <p className="text-xs font-black">PNG TRANSPARENTE (HD)</p>
+                    <p className="text-[9px] text-stone-400">Sin compresión, ideal para Photoshop, Clip Studio, Procreate</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedOutputFormat('webp')}
+                    className={`p-2.5 rounded-xl text-left border transition-all ${
+                      selectedOutputFormat === 'webp'
+                        ? 'bg-pink-950/50 border-pink-500 text-pink-200 font-bold shadow-xs'
+                        : 'bg-[#181C2B] border-[#262C3E] text-stone-300 hover:text-white'
+                    }`}
+                  >
+                    <p className="text-xs font-black">WEBP TRANSPARENTE</p>
+                    <p className="text-[9px] text-stone-400">Ultra liviano para web, stickers y aplicaciones modernas</p>
+                  </button>
                 </div>
               </div>
             </div>
@@ -4953,6 +5466,8 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
                     <span>
                       {tool.id === 'optimize-tools'
                         ? t('workspace.compressAndReduce', 'Comprimir y Reducir Peso')
+                        : tool.id === 'lineart-tools'
+                        ? 'Extraer Lineart PNG Transparente ✒️'
                         : tool.id === 'recolor-tools'
                         ? t('workspace.applyRecolor', 'Aplicar Cambio de Color')
                         : tool.id === 'analyzer-tools'
@@ -4982,12 +5497,22 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
           <div className="flex items-center justify-between pb-2 border-b border-[#222736]">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold text-white">
-                {result ? 'Archivo Procesado' : tool.id === 'recolor-tools' ? 'Vista en Tiempo Real' : 'Vista Previa en Vivo'}
+                {result
+                  ? 'Archivo Procesado'
+                  : tool.id === 'lineart-tools'
+                  ? 'Lineart en Tiempo Real'
+                  : tool.id === 'recolor-tools'
+                  ? 'Vista en Tiempo Real'
+                  : 'Vista Previa en Vivo'}
               </h3>
               {!result && (
                 <span className="flex items-center gap-1 text-[10px] font-bold text-[#34D399] bg-[#14261C] px-2 py-0.5 rounded-full border border-[#10B981]/40">
                   <span className="h-1.5 w-1.5 rounded-full bg-[#10B981] animate-ping" />
-                  {tool.id === 'recolor-tools'
+                  {tool.id === 'lineart-tools'
+                    ? isLineartUpdating
+                      ? 'Dibujando trazos...'
+                      : 'Lineart PNG Transparente'
+                    : tool.id === 'recolor-tools'
                     ? isRecolorPreviewUpdating
                       ? 'Actualizando...'
                       : 'Color en Directo'
@@ -5001,7 +5526,7 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
-              {(tool.id === 'recolor-tools' || result) && !isVideo && (
+              {(tool.id === 'recolor-tools' || tool.id === 'lineart-tools' || result) && !isVideo && (
                 <button
                   type="button"
                   onMouseDown={() => setShowOriginalComparison(true)}
@@ -5219,33 +5744,126 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
               </div>
             ) : (
               /* Image / GIF / Static Preview */
-              <div className="relative flex items-center justify-center">
-                <img
-                  src={
-                    showOriginalComparison
-                      ? fileInfo.previewUrl
-                      : (tool.id === 'recolor-tools' && recolorLivePreviewUrl)
-                      ? recolorLivePreviewUrl
-                      : fileInfo.previewUrl
-                  }
-                  alt="Vista previa"
-                  onClick={handlePreviewImageClick}
-                  className={`max-h-[270px] w-auto max-w-full object-contain rounded-xl transition-all ${
-                    tool.id === 'recolor-tools' || isEyedropperActive
-                      ? 'cursor-crosshair ring-2 ring-cyan-400 shadow-md'
+              <div className="space-y-2">
+                {/* Background Checkerboard / Canvas Selector for Lineart Tool */}
+                {tool.id === 'lineart-tools' && (
+                  <div className="flex flex-wrap items-center justify-between gap-1.5 p-1.5 rounded-xl bg-[#121520] border border-[#222736] text-xs">
+                    <span className="text-[10px] text-stone-400 font-medium">
+                      Fondo del Lienzo:
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setLineartBgPreview('transparent')}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all ${
+                          lineartBgPreview === 'transparent'
+                            ? 'bg-pink-950/60 border-pink-400 text-pink-300 shadow-xs'
+                            : 'bg-[#181C2B] border-[#262C3E] text-stone-400 hover:text-white'
+                        }`}
+                        title="Verificación con tablero de ajedrez (Transparencia pura)"
+                      >
+                        🏁 Cuadrícula Alfa
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLineartBgPreview('white')}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all ${
+                          lineartBgPreview === 'white'
+                            ? 'bg-white text-black border-white shadow-xs'
+                            : 'bg-[#181C2B] border-[#262C3E] text-stone-400 hover:text-white'
+                        }`}
+                        title="Fondo Blanco papel"
+                      >
+                        ⬜ Papel Blanco
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLineartBgPreview('dark')}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all ${
+                          lineartBgPreview === 'dark'
+                            ? 'bg-slate-900 border-slate-500 text-white shadow-xs'
+                            : 'bg-[#181C2B] border-[#262C3E] text-stone-400 hover:text-white'
+                        }`}
+                        title="Fondo Oscuro para contrastar líneas claras"
+                      >
+                        ⬛ Oscuro
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLineartBgPreview('original')}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all ${
+                          lineartBgPreview === 'original'
+                            ? 'bg-pink-900/60 border-pink-400 text-pink-200 shadow-xs'
+                            : 'bg-[#181C2B] border-[#262C3E] text-stone-400 hover:text-white'
+                        }`}
+                        title="Superpuesto sobre la imagen original"
+                      >
+                        🖼️ Superpuesto
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleCopyLineartPng}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-pink-950/40 hover:bg-pink-900/60 border border-pink-500/40 text-pink-300 text-[10px] font-bold transition-all ml-auto cursor-pointer"
+                      title="Copiar directamente el PNG transparente al portapapeles"
+                    >
+                      {lineartCopied ? '¡Copiado!' : 'Copiar PNG'}
+                    </button>
+                  </div>
+                )}
+
+                <div
+                  className={`relative flex items-center justify-center p-2 rounded-2xl overflow-hidden transition-all ${
+                    tool.id === 'lineart-tools' && !showOriginalComparison
+                      ? lineartBgPreview === 'transparent'
+                        ? 'bg-[linear-gradient(45deg,#232938_25%,transparent_25%),linear-gradient(-45deg,#232938_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#232938_75%),linear-gradient(-45deg,transparent_75%,#232938_75%)] [background-size:16px_16px] [background-position:0_0,0_8px,8px_-8px,-8px_0px] bg-[#141824]'
+                        : lineartBgPreview === 'white'
+                        ? 'bg-white'
+                        : lineartBgPreview === 'dark'
+                        ? 'bg-[#0a0c14]'
+                        : 'bg-[#141824]'
                       : ''
                   }`}
-                  style={{
-                    transform: `rotate(${rotationAngle}deg) scale(${flipH ? -1 : 1}, ${flipV ? -1 : 1})`,
-                    filter:
-                      tool.id === 'effects-tools'
-                        ? `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)`
-                        : undefined
-                  }}
-                  referrerPolicy="no-referrer"
-                />
+                  style={
+                    tool.id === 'lineart-tools' && !showOriginalComparison && lineartBgPreview === 'original'
+                      ? {
+                          backgroundImage: `url(${fileInfo.previewUrl})`,
+                          backgroundSize: 'contain',
+                          backgroundPosition: 'center',
+                          backgroundRepeat: 'no-repeat'
+                        }
+                      : undefined
+                  }
+                >
+                  <img
+                    src={
+                      showOriginalComparison
+                        ? fileInfo.previewUrl
+                        : (tool.id === 'lineart-tools' && lineartLivePreviewUrl)
+                        ? lineartLivePreviewUrl
+                        : (tool.id === 'recolor-tools' && recolorLivePreviewUrl)
+                        ? recolorLivePreviewUrl
+                        : fileInfo.previewUrl
+                    }
+                    alt="Vista previa"
+                    onClick={handlePreviewImageClick}
+                    className={`max-h-[270px] w-auto max-w-full object-contain rounded-xl transition-all ${
+                      tool.id === 'recolor-tools' || isEyedropperActive
+                        ? 'cursor-crosshair ring-2 ring-cyan-400 shadow-md'
+                        : ''
+                    }`}
+                    style={{
+                      transform: `rotate(${rotationAngle}deg) scale(${flipH ? -1 : 1}, ${flipV ? -1 : 1})`,
+                      filter:
+                        tool.id === 'effects-tools'
+                          ? `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)`
+                          : undefined
+                    }}
+                    referrerPolicy="no-referrer"
+                  />
 
-                {/* Eyedropper indicator overlay for Recolor Tool */}
+                  {/* Eyedropper indicator overlay for Recolor Tool */}
                 {tool.id === 'recolor-tools' && (
                   <div className="absolute top-2 left-2 bg-black/80 backdrop-blur-xs px-2.5 py-1 rounded-full border border-cyan-500/50 text-[10px] font-bold text-cyan-300 flex items-center gap-1.5 shadow-md pointer-events-none">
                     <Pipette className="h-3 w-3 text-cyan-400 animate-pulse" />
@@ -5392,6 +6010,7 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
                     </span>
                   </div>
                 )}
+                </div>
               </div>
             )}
           </div>
@@ -5475,6 +6094,7 @@ export const ActiveToolWorkspace: React.FC<ActiveToolWorkspaceProps> = ({
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                     {[
+                      { id: 'lineart-tools', name: 'Lineart PNG', icon: PenTool, color: 'hover:border-pink-500/60 hover:text-pink-300' },
                       { id: 'recolor-tools', name: 'Cambiar Color', icon: Pipette, color: 'hover:border-cyan-500/60 hover:text-cyan-300' },
                       { id: 'effects-tools', name: 'Filtros y FX', icon: Wand2, color: 'hover:border-rose-500/60 hover:text-rose-300' },
                       { id: 'watermark-tools', name: 'Marca de agua', icon: ShieldAlert, color: 'hover:border-amber-500/60 hover:text-amber-300' },
